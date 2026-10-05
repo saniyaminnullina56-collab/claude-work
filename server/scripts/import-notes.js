@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import { loadConfig } from '../src/config.js';
 import { openStore } from '../src/store.js';
+import { cleanNote } from '../src/notes-clean.js';
 
 const file = process.argv[2];
 if (!file) { console.error('Укажите путь к notes.json'); process.exit(1); }
@@ -11,7 +12,7 @@ const store = openStore(loadConfig().dbFile);
 let n = 0;
 for (const [bid, note] of Object.entries(notes)) {
   if (!note || typeof note.content !== 'string') continue;
-  store.set(['notes', bid], { content: note.content, updatedAt: note.updatedAt || '' });
+  store.set(['notes', bid], { content: cleanNote(note.content), updatedAt: note.updatedAt || '' });
   n++;
 }
 console.log(`Импортировано конспектов: ${n}`);

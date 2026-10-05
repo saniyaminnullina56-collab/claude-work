@@ -6,29 +6,9 @@
 <title>Выручай-комната 📚</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- ═══════════════════════════════════════════════════
-  FIREBASE CONFIG — заполните после создания проекта:
-  1. Перейдите на https://console.firebase.google.com
-  2. Создайте проект (название любое)
-  3. Add app → Web → скопируйте firebaseConfig
-  4. Вставьте значения ниже вместо "ВСТАВЬТЕ_СЮДА"
-  5. В Firebase Console → Realtime Database → Create database
-     → Start in test mode (потом можно ограничить)
-  ═══════════════════════════════════════════════════ -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
-  const FIREBASE_CONFIG = {
-    apiKey:            "AIzaSyAdY-p_9gQ_4F7LWakDQJO4acg3KtDodWc",
-    authDomain:        "bookclub-by-saniya.firebaseapp.com",
-    databaseURL:       "https://bookclub-by-saniya-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId:         "bookclub-by-saniya",
-    storageBucket:     "bookclub-by-saniya.firebasestorage.app",
-    messagingSenderId: "888392558915",
-    appId:             "1:888392558915:web:0f7b4c24f62b20afd9e7f6"
-  };
-  // Пароль администратора (Сания). Поменяйте на свой:
-  const ADMIN_PASS = "777";
-  // Код доступа к платным разделам по умолчанию.
-  // Можно изменить в панели администратора (Profile → ⚙️) — сохраняется в Firebase.
+  // Код доступа и пароли больше не хранятся в браузере: всё проверяет сервер.
   const DEFAULT_PRO_CODE = "";
   // TMDB API key — бесплатно на themoviedb.org → Профиль → API → Create (Developer)
   // Вставьте ключ «API Read Access Token» или «API Key (v3)» сюда:
@@ -413,10 +393,12 @@ body.dark .stars span.on{color:#d4a030;}
 </nav>
 
 <!-- ═══ HOME ═══ -->
+<div id="auth-wall" style="display:none;position:fixed;inset:0;z-index:999;background:var(--bg,#fff);align-items:center;justify-content:center;text-align:center;padding:32px;"><div><div style="font-size:3rem;">📚</div><h2 style="margin:12px 0;">Выручай-комната</h2><p class="aw-msg" style="color:var(--txl);line-height:1.5;"></p></div></div>
+<style>#auth-wall.show{display:flex!important;}</style>
 <div class="view on" id="v-home">
   <div class="hdr"><h1>📖 Выручай-комната</h1><button class="ha" onclick="toggleDark()" id="dark-btn" title="Тёмная тема" style="font-size:1rem;padding:4px 9px;">🌙</button></div>
   <div class="pg">
-    <div class="offline-warn" id="offline-warn">⚠️ Нет подключения к Firebase. Данные не сохраняются на сервере. Настройте конфиг выше.</div>
+    <div class="offline-warn" id="offline-warn">⚠️ Нет связи с сервером клуба. Изменения не сохранятся, пока связь не вернётся.</div>
     <div id="hm-hero"></div>
     <div id="hm-ann"></div>
     <div class="stat-row" id="hm-stats"></div>
@@ -501,9 +483,7 @@ body.dark .stars span.on{color:#d4a030;}
   <span onclick="pickRxn('💡')">💡</span><span onclick="pickRxn('✨')">✨</span>
 </div>
 
-<!-- FIREBASE SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 
 <script>
 // ══════════════════════════════════════════════
@@ -516,24 +496,28 @@ const CLUB_START=new Date(2024,9);
 // ══════════════════════════════════════════════
 //  FIREBASE INIT
 // ══════════════════════════════════════════════
-let db=null, fbOk=false;
+let fbOk=false, ME=null;
+const TG=window.Telegram&&window.Telegram.WebApp;
 
-function initFirebase(){
-  try{
-    if(FIREBASE_CONFIG.apiKey==='ВСТАВЬТЕ_СЮДА'){
-      console.warn('Firebase не настроен — работаем локально');
-      document.getElementById('offline-warn').classList.add('show');
-      return;
-    }
-    firebase.initializeApp(FIREBASE_CONFIG);
-    db=firebase.database();
-    fbOk=true;
-    syncShow('✅ Подключено к Firebase','');
-    setTimeout(()=>syncHide(),2000);
-  }catch(e){
-    console.error('Firebase error:',e);
-    document.getElementById('offline-warn').classList.add('show');
-  }
+function authHeader(){
+  if(TG&&TG.initData)return 'tma '+TG.initData;
+  const dev=new URLSearchParams(location.search).get('dev'); // только для разработки: сервер с DEV_AUTH=1
+  if(dev){const i=dev.indexOf('|');return 'dev '+(i<0?dev:dev.slice(0,i))+(i<0?'':'|'+encodeURIComponent(dev.slice(i+1)));}
+  return '';
+}
+async function api(method,path,body){
+  const h={'Authorization':authHeader()};
+  if(body!==undefined)h['Content-Type']='application/json';
+  const r=await fetch('/api'+path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
+  let data=null;try{data=await r.json();}catch(e){}
+  if(!r.ok){const e=new Error((data&&data.error)||('Ошибка '+r.status));e.status=r.status;throw e;}
+  return data;
+}
+function showAuthWall(e){
+  const w=document.getElementById('auth-wall');
+  if(!w)return;
+  w.querySelector('.aw-msg').textContent=(e&&e.status&&e.status!==401)?('Не удалось подключиться: '+e.message):'Это приложение открывается из Telegram. Найдите бота клуба и нажмите «Открыть клуб».';
+  w.classList.add('show');
 }
 
 function syncShow(msg,cls){
@@ -542,34 +526,56 @@ function syncShow(msg,cls){
 }
 function syncHide(){document.getElementById('sync-bar').classList.remove('show');}
 
-// Firebase helpers
+// Слой данных: те же функции, что были для Firebase, но через наш сервер.
+const fbPath=p=>'/db/'+p.split('/').map(encodeURIComponent).join('/');
+function fbDone(ok,e){
+  if(ok){syncShow('✅ Сохранено','');setTimeout(syncHide,1500);}
+  else{syncShow('⚠️ '+((e&&e.message)||'Ошибка сохранения'),'err');setTimeout(syncHide,3500);}
+  setTimeout(syncNow,150); // подтянуть актуальное состояние (при отказе — вернуть прежнее)
+}
 function fbGet(path){
   if(!fbOk)return Promise.resolve(null);
-  return db.ref(path).get().then(s=>s.val());
+  return api('GET',fbPath(path)).then(r=>r.value);
 }
 function fbSet(path,val){
   if(!fbOk){saveLocal();return Promise.resolve();}
   syncShow('🔄 Сохранение...');
-  return db.ref(path).set(val)
-    .then(()=>{syncShow('✅ Сохранено','');setTimeout(syncHide,1500);})
-    .catch(e=>{syncShow('⚠️ Ошибка сохранения','err');console.error(e);});
+  return api('PUT',fbPath(path),{value:val===undefined?null:val}).then(()=>fbDone(true),e=>fbDone(false,e));
 }
 function fbPush(path,val){
   if(!fbOk){saveLocal();return Promise.resolve({key:'local_'+Date.now()});}
   syncShow('🔄 Сохранение...');
-  const ref=db.ref(path).push();
-  return ref.set(val)
-    .then(()=>{syncShow('✅ Сохранено','');setTimeout(syncHide,1500);return ref;})
-    .catch(e=>{syncShow('⚠️ Ошибка','err');return ref;});
+  return api('POST',fbPath(path),{value:val}).then(r=>{fbDone(true);return r;},e=>{fbDone(false,e);return {};});
 }
 function fbDel(path){
   if(!fbOk){saveLocal();return Promise.resolve();}
-  return db.ref(path).remove();
+  return api('DELETE',fbPath(path)).then(()=>fbDone(true),e=>fbDone(false,e));
 }
-function fbListen(path,cb){
-  if(!fbOk)return;
-  db.ref(path).on('value',s=>cb(s.val()));
+const fbListeners=[], fbRevs={};
+function fbListen(path,cb){fbListeners.push({path:path.split('/'),cb});}
+let syncBusy=false;
+async function syncNow(){
+  if(!fbOk||syncBusy)return;
+  syncBusy=true;
+  try{
+    const r=await api('POST','/sync',{revs:fbRevs});
+    document.getElementById('offline-warn').classList.remove('show');
+    for(const [root,o] of Object.entries(r.roots)){
+      fbRevs[root]=o.rev;
+      for(const l of fbListeners){
+        if(l.path[0]!==root)continue;
+        let v=o.value;
+        for(const k of l.path.slice(1)){v=(v&&typeof v==='object'&&k in v)?v[k]:null;}
+        try{l.cb(v===undefined?null:v);}catch(e){console.error(e);}
+      }
+    }
+  }catch(e){
+    if(e.status===401)showAuthWall(e);
+    else document.getElementById('offline-warn').classList.add('show');
+  }finally{syncBusy=false;}
 }
+setInterval(()=>{if(!document.hidden)syncNow();},5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow();});
 
 // ══════════════════════════════════════════════
 //  LOCAL DATA (fallback when no Firebase)
@@ -601,9 +607,10 @@ function loadLocal(){
   if(!D.config.payInfo.payUrl)D.config.payInfo.payUrl='';
   if(!D.config.bookPayInfo)D.config.bookPayInfo={};
 }
-function saveLocal(){try{localStorage.setItem('vrk5',JSON.stringify(D));}catch(e){}}
+function saveLocal(){try{localStorage.setItem('vrk5',JSON.stringify({...D,notes:{},profile:{...D.profile,isAdmin:false}}));}catch(e){}}
 
 function initBooks(){
+  if(fbOk&&!isAdmin())return; // участницы получают каталог с сервера
   const _seed=()=>[
     {id:'b1',title:'Прачечная, стирающая печали',author:'Сон Вон Пён',yearPublished:2016,readingMonth:'2024-10',emoji:'🌊',coverUrl:'',audioUrl:'',bookUrl:'',description:'Корейский роман о прачечной, где стирают не только одежду, но и горе.'},
     {id:'b2',title:'Атомные привычки',author:'Джеймс Клир',yearPublished:2018,readingMonth:'2024-11',emoji:'⚛️',coverUrl:'',audioUrl:'',bookUrl:'',description:'Как небольшие изменения приводят к выдающимся результатам.'},
@@ -662,25 +669,27 @@ function initBooks(){
   }
   D.books=_seed();
   saveLocal();
+  if(fbOk&&isAdmin()){const o={};D.books.forEach(b=>{o[b.id]=b;});fbSet('books',o);} // первый запуск: заполнить каталог на сервере
 }
 
 
 // ══════════════════════════════════════════════
 //  FIREBASE REAL-TIME SYNC
 // ══════════════════════════════════════════════
+// Старые данные могли храниться как объект «ключ → запись»; приводим к спискам.
+function listify(val){const o=val||{};for(const k of Object.keys(o)){if(o[k]&&!Array.isArray(o[k])&&typeof o[k]==='object')o[k]=Object.values(o[k]);}return o;}
 function setupListeners(){
   if(!fbOk)return;
   fbListen('books',val=>{if(val){const arr=Object.values(val);D.books=arr.length?arr:D.books;}renderIfActive('catalog');renderIfActive('club');renderIfActive('home');});
-  fbListen('comments',val=>{D.comments=val||{};if(curV==='book')renderBook(curBk);});
-  fbListen('quotes',val=>{D.quotes=val||{};if(curV==='book')renderBook(curBk);renderIfActive('home');});
-  fbListen('questions',val=>{D.questions=val||{};if(curV==='book')renderBook(curBk);});
+  fbListen('comments',val=>{D.comments=listify(val);if(curV==='book')renderBook(curBk);});
+  fbListen('quotes',val=>{D.quotes=listify(val);if(curV==='book')renderBook(curBk);renderIfActive('home');});
+  fbListen('questions',val=>{D.questions=listify(val);if(curV==='book')renderBook(curBk);});
   fbListen('votes',val=>{D.votes=val||{options:[]};renderIfActive('club');});
   fbListen('members',val=>{D.members=val?Object.values(val):[];renderIfActive('club');renderIfActive('profile');});
   fbListen('announcements',val=>{D.announcements=val?Object.values(val):[];renderIfActive('home');});
   fbListen('groupstatuses',val=>{D.groupstatuses=val||{};if(curV==='book')renderBook(curBk);});
   fbListen('ratings',val=>{D.ratings=val||{};if(curV==='book')renderBook(curBk);});
   fbListen('adaptations',val=>{D.adaptations=val||{};if(curV==='book')renderBook(curBk);});
-  fbListen('notes',val=>{if(val)Object.assign(D.notes,val);if(curV==='book')renderBook(curBk);});
   fbListen('suggestions',val=>{D.suggestions=val||{};if(curV==='book')renderBook(curBk);renderIfActive('club');});
   fbListen('personalReviews',val=>{D.personalReviews=val||{};if(curV==='book')renderBook(curBk);});
   fbListen('config',val=>{
@@ -698,38 +707,39 @@ function setupListeners(){
   fbListen('userdata/'+uKey+'/progress',val=>{D.progress=val||{};if(curV==='book')renderBook(curBk);renderIfActive('profile');});
 }
 
-function userKey(){return(D.profile.name||'user').replace(/[^a-zA-Zа-яёА-ЯЁ0-9]/g,'_');}
+function userKey(){return ME?ME.key:'local';}
 
 // ── PREMIUM ACCESS ──
 function isPro(bid){
   if(isAdmin())return true;
-  if(localStorage.getItem('vrk-pro')==='1')return true;
-  if(bid&&localStorage.getItem('vrk-book-'+bid)==='1')return true;
-  return false;
+  const e=(ME&&ME.entitlements)||[];
+  return e.includes('*')||(!!bid&&e.includes(String(bid)));
 }
 function getProCode(){return(D.config&&D.config.proCode&&D.config.proCode.trim())||DEFAULT_PRO_CODE;}
-function tryUnlockPro(){
+async function redeemCode(code,bookId){
+  const r=await api('POST','/redeem',{code,bookId});
+  ME.entitlements=r.entitlements;
+  await loadNotes();
+  return r;
+}
+async function loadNotes(){
+  try{D.notes=await api('GET','/notes');}catch(e){console.error(e);}
+  if(curV==='book')renderBook(curBk);
+  renderIfActive('catalog');renderIfActive('profile');
+}
+async function tryUnlockPro(){
   const inp=document.getElementById('pro-code-in');
   if(!inp)return;
   const code=inp.value.trim();
   if(!code){alert('Введи код доступа');return;}
-  const proCode=getProCode();
-  if(!proCode){alert('Код доступа ещё не настроен организатором.');return;}
-  if(code.toUpperCase()===proCode.toUpperCase()){
-    localStorage.setItem('vrk-pro','1');
+  try{
+    await redeemCode(code);
     inp.value='';
-    renderProfile();
-    if(curV==='book')renderBook(curBk);
-    renderIfActive('catalog');
     alert('🎉 Доступ открыт! Конспекты и личная библиотека теперь доступны.');
-  } else {
-    alert('Неверный код. Уточни у организатора.');
-  }
+  }catch(e){alert(e.status===403?'Неверный код. Уточни у организатора.':e.message);}
+  renderProfile();
 }
-function revokePro(){localStorage.removeItem('vrk-pro');renderProfile();if(curV==='book')renderBook(curBk);renderIfActive('catalog');}
-function getBookCode(bid){
-  return(D.config&&D.config.bookPayInfo&&D.config.bookPayInfo[bid]&&D.config.bookPayInfo[bid].code)||'';
-}
+function revokePro(){alert('Доступ привязан к вашему аккаунту Telegram и действует постоянно.');}
 function showBookPaywall(bid){
   // Find and click the Konspekt tab button
   const allTabs=document.querySelectorAll('.tb');
@@ -744,25 +754,16 @@ function showBookPaywall(bid){
   const notePane=document.getElementById('btp-note-'+bid);
   if(notePane)notePane.scrollIntoView({behavior:'smooth',block:'start'});
 }
-function tryUnlockBook(bid){
+async function tryUnlockBook(bid){
   const inp=document.getElementById('book-code-in-'+bid);
   if(!inp)return;
   const code=inp.value.trim();
   if(!code){alert('Введи код доступа');return;}
-  const bookCode=getBookCode(bid);
-  const globalCode=getProCode();
-  if(!bookCode&&!globalCode){alert('Код доступа ещё не настроен. Обратись к организатору.');return;}
-  if(bookCode&&code.toUpperCase()===bookCode.toUpperCase()){
-    localStorage.setItem('vrk-book-'+bid,'1');
-    renderBook(bid);
-    alert('🎉 Доступ к конспекту открыт!');
-  } else if(globalCode&&code.toUpperCase()===globalCode.toUpperCase()){
-    localStorage.setItem('vrk-pro','1');
-    renderBook(bid);
-    alert('🎉 Доступ ко всем конспектам открыт!');
-  } else {
-    alert('Неверный код. Проверь код или обратись к организатору.');
-  }
+  try{
+    const r=await redeemCode(code,bid);
+    alert(r.scope==='*'?'🎉 Доступ ко всем конспектам открыт!':'🎉 Доступ к конспекту открыт!');
+  }catch(e){alert(e.status===403?'Неверный код. Проверь код или обратись к организатору.':e.message);}
+  renderBook(bid);
 }
 function paywallCard(section, bid){
   const info=(D.config&&D.config.payInfo)||{};
@@ -836,13 +837,7 @@ function goBack(){go(prevV||'home');}
 // ══════════════════════════════════════════════
 //  ADMIN
 // ══════════════════════════════════════════════
-function isAdmin(){return D.profile.isAdmin===true;}
-function promptAdmin(){
-  const p=prompt('Введите пароль администратора:');
-  if(p===ADMIN_PASS){D.profile.isAdmin=true;saveLocal();alert('✅ Режим администратора включён');renderProfile();renderCatalog();}
-  else if(p!==null)alert('Неверный пароль');
-}
-
+function isAdmin(){return !!(ME&&ME.isAdmin);}
 // ══════════════════════════════════════════════
 //  HOME
 // ══════════════════════════════════════════════
@@ -1581,7 +1576,6 @@ function renderProfile(){
       </div>
       <div class="coll-body" style="padding-top:8px;">
         <div style="font-size:.82rem;color:var(--g);font-weight:600;margin-bottom:8px;">✅ Подписка активна — конспекты и личная библиотека открыты</div>
-        <button class="btn bg2 sm" onclick="revokePro()" style="font-size:.72rem;">Сбросить доступ</button>
       </div>
     </div>`:''}
 
@@ -1643,7 +1637,7 @@ function renderProfile(){
       </div>
     </div>`:''}
 
-    ${!p.isAdmin?`<div class="admin-only" onclick="promptAdmin()">🔐 Войти как организатор</div>`:'<div style="margin-top:12px;font-size:.75rem;color:var(--txl);text-align:center;">Вы вошли как организатор ✓ <button class="btn bg2 sm" onclick="logoutAdmin()">Выйти</button></div>'}
+    ${isAdmin()?renderBroadcastCard():''}
   `;
 }
 function plist(title,books){
@@ -1662,17 +1656,16 @@ function plist(title,books){
     </div>
   </div>`;
 }
-function saveName(){
+async function saveName(){
   const n=document.getElementById('pname').value.trim();if(!n)return;
-  D.profile.name=n;D.profile.avatar=n.charAt(0).toUpperCase();saveLocal();
-  if(fbOk&&!(D.members||[]).find(m=>m.name===n)){
-    const m={id:'m'+Date.now(),name:n,role:'',isAdmin:D.profile.isAdmin||false};
-    if(!D.members)D.members=[];D.members.push(m);
-    fbPush('members',m);
-  }
+  try{
+    const me=await api('POST','/profile',{name:n});
+    ME.name=me.name;ME.avatar=me.avatar;
+    D.profile.name=me.name;D.profile.avatar=me.avatar;saveLocal();
+    syncNow();
+  }catch(e){alert(e.message);}
   renderProfile();
 }
-function logoutAdmin(){D.profile.isAdmin=false;saveLocal();renderProfile();renderCatalog();}
 function saveProConfig(){
   if(!isAdmin())return;
   const code=(document.getElementById('cfg-code')||{}).value||'';
@@ -1724,7 +1717,9 @@ function toggleDark(){
   if(btn)btn.textContent=dark?'☀️':'🌙';
 }
 function initDark(){
-  if(localStorage.getItem('vrk-dark')==='1'){
+  let pref=null;try{pref=localStorage.getItem('vrk-dark');}catch(e){}
+  if(pref===null&&TG&&TG.colorScheme==='dark')pref='1';
+  if(pref==='1'){
     document.body.classList.add('dark');
     const btn=document.getElementById('dark-btn');
     if(btn)btn.textContent='☀️';
@@ -2283,9 +2278,7 @@ function saveNote(bid){
   const now=new Date().toISOString();
   if(!D.notes)D.notes={};
   D.notes[bid]={content:text,updatedAt:now};
-  if(fbOk){
-    fbSet('notes/'+bid,{content:text,updatedAt:now});
-  } else saveLocal();
+  api('PUT','/notes/'+encodeURIComponent(bid),{content:text,updatedAt:now}).catch(e=>alert('Не сохранилось: '+e.message));
   renderBook(bid);
   // Switch to konspekt tab
   setTimeout(()=>{const btn=document.querySelector(`[onclick*="bTab('${bid}','note'"]`);if(btn)btn.click();},50);
@@ -2386,23 +2379,44 @@ function x(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 //  INIT
 // ══════════════════════════════════════════════
 loadLocal();
+D.profile.isAdmin=false; D.notes={};
 initDark();
 initCoverCache();
-initFirebase();
-setupListeners();
-initBooks();
-fetchMissingCovers();
-fetch('notes.json')
-  .then(r=>r.ok?r.json():null)
-  .catch(()=>null)
-  .then(json=>{
-    if(json&&typeof json==='object'){
-      // notes.json fills gaps; Firebase-saved notes (already in D.notes) take priority
-      Object.keys(json).forEach(k=>{if(!D.notes[k])D.notes[k]=json[k];});
-      if(curV==='book')renderBook(curBk);
-    }
-  });
+if(TG){try{TG.ready();TG.expand();}catch(e){}}
 renderHome();
+
+async function boot(){
+  try{ME=await api('GET','/me');}catch(e){showAuthWall(e);return;}
+  D.profile={name:ME.name,avatar:ME.avatar,isAdmin:ME.isAdmin};
+  fbOk=true;
+  setupListeners();
+  await syncNow();
+  await loadNotes();
+  initBooks();
+  fetchMissingCovers();
+  renderHome();
+  const deep=new URLSearchParams(location.search).get('book')||(TG&&TG.initDataUnsafe&&TG.initDataUnsafe.start_param);
+  if(deep&&D.books.find(b=>b.id===deep))openBook(deep);
+}
+boot();
+
+// Организатор: уведомление участницам через бота
+function renderBroadcastCard(){
+  return `<div class="card coll">
+    <div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>🔔 Уведомление участницам</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body" style="padding-top:10px;">
+      <div style="font-size:.78rem;color:var(--txl);margin-bottom:8px;">Сообщение придёт от бота тем, кто его запускал и не отключил уведомления.</div>
+      <textarea id="bc-text" rows="3" placeholder="Например: Книга месяца — «…». Обсуждение 15-го!"></textarea>
+      <button class="btn bp sm" style="margin-top:8px;" onclick="sendBroadcast()">Отправить</button>
+    </div></div>`;
+}
+async function sendBroadcast(){
+  const t=(document.getElementById('bc-text')||{}).value||'';
+  if(!t.trim())return;
+  if(!confirm('Отправить сообщение всем участницам?'))return;
+  try{const r=await api('POST','/admin/broadcast',{text:t.trim()});alert('Рассылка запущена, получателей: '+r.queued);document.getElementById('bc-text').value='';}
+  catch(e){alert(e.message);}
+}
 </script>
 </body>
 </html>
