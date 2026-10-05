@@ -128,7 +128,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--g);border-color:
 
 /* ── PROFILE ── */
 .phdr{background:linear-gradient(135deg,var(--gd),var(--g));color:white;border-radius:14px;padding:22px;text-align:center;margin-bottom:18px;}
-.av-lg{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;margin:0 auto 10px;border:2px solid rgba(255,255,255,.4);}
+.av-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0;}
+.av-opt{background:var(--card);border:2px solid var(--bdr);border-radius:14px;padding:8px 4px 6px;text-align:center;cursor:pointer;font-size:.7rem;color:var(--txl);}
+.av-opt.on{border-color:var(--r);background:var(--bgd);color:var(--rd);font-weight:600;}
+.av-opt svg{margin:0 auto 3px;}
+.goal-ring{display:flex;gap:16px;align-items:center;}
+.onb{position:fixed;inset:0;z-index:900;background:var(--bg,#fbf6ee);overflow-y:auto;padding:22px 18px 40px;display:none;}
+.onb.show{display:block;}
+.onb h1{font-size:1.4rem;margin-bottom:6px;}
+.onb li{margin:6px 0;font-size:.88rem;line-height:1.45;}
+.note-teaser{position:relative;max-height:260px;overflow:hidden;}
+.note-teaser::after{content:'';position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(transparent,var(--card));}
+.av-lg{width:76px;height:76px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;margin:0 auto 10px;border:2px solid rgba(255,255,255,.4);}
 
 /* ── COMMENTS ── */
 .cmt{background:var(--card);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--bdr);}
@@ -393,6 +404,7 @@ body.dark .stars span.on{color:#d4a030;}
 </nav>
 
 <!-- ═══ HOME ═══ -->
+<div id="onb" class="onb"><div id="onb-body"></div></div>
 <div id="auth-wall" style="display:none;position:fixed;inset:0;z-index:999;background:var(--bg,#fff);align-items:center;justify-content:center;text-align:center;padding:32px;"><div><div style="font-size:3rem;">📚</div><h2 style="margin:12px 0;">Выручай-комната</h2><p class="aw-msg" style="color:var(--txl);line-height:1.5;"></p></div></div>
 <style>#auth-wall.show{display:flex!important;}</style>
 <div class="view on" id="v-home">
@@ -577,11 +589,36 @@ async function syncNow(){
 setInterval(()=>{if(!document.hidden)syncNow();},5000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow();});
 
+// ── АВАТАРЫ: оригинальные рисунки (id хранится на сервере) ──
+const AV_NAMES={owl:'Сова',kitten:'Котёнок',fox:'Лисёнок',bunny:'Зайка',bear:'Медвежонок',panda:'Панда',hedgehog:'Ёжик',penguin:'Пингвин'};
+const AV_BG={owl:'#f6e3c8',kitten:'#fde2d3',fox:'#fdebd0',bunny:'#e8def8',bear:'#efe0cf',panda:'#d9ebf0',hedgehog:'#e3efd9',penguin:'#d8e8f5'};
+const _eye=(cx,cy,r=3)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#2b2230"/><circle cx="${cx+r*.35}" cy="${cy-r*.4}" r="${r*.38}" fill="#fff"/>`;
+const _blush=(y=40)=>`<ellipse cx="20" cy="${y}" rx="3.6" ry="2.4" fill="#ff9aa8" opacity=".55"/><ellipse cx="44" cy="${y}" rx="3.6" ry="2.4" fill="#ff9aa8" opacity=".55"/>`;
+const AV_ART={
+owl:`<path d="M15 20 L21 11 L28 20Z M49 20 L43 11 L36 20Z" fill="#8a5a3c"/><ellipse cx="32" cy="37" rx="20" ry="21" fill="#a8744f"/><ellipse cx="32" cy="43" rx="12" ry="13" fill="#f3d9b1"/><circle cx="23.5" cy="30" r="8.2" fill="#fff6e4"/><circle cx="40.5" cy="30" r="8.2" fill="#fff6e4"/>${_eye(23.5,30,4)}${_eye(40.5,30,4)}<path d="M29.5 35 L32 40 L34.5 35Z" fill="#f2a33a"/><path d="M26 47 q2 2 4 0 M34 47 q2 2 4 0 M29 52 q3 2 6 0" stroke="#d9b98a" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="12.5" cy="40" rx="4" ry="9" fill="#8a5a3c" transform="rotate(8 12.5 40)"/><ellipse cx="51.5" cy="40" rx="4" ry="9" fill="#8a5a3c" transform="rotate(-8 51.5 40)"/>`,
+kitten:`<path d="M13 30 L15 11 L29 21Z M51 30 L49 11 L35 21Z" fill="#e8964f"/><path d="M17 24 L18 16 L24 21Z M47 24 L46 16 L40 21Z" fill="#ffb7b0"/><circle cx="32" cy="37" r="20" fill="#f2a965"/><path d="M32 17 v7 M26 18.5 l1.5 5.5 M38 18.5 l-1.5 5.5" stroke="#d98440" stroke-width="2.2" stroke-linecap="round"/><ellipse cx="32" cy="45" rx="9" ry="7" fill="#fff1e0"/>${_eye(24,34,3.2)}${_eye(40,34,3.2)}<path d="M29.5 40 h5 l-2.5 3Z" fill="#ff8a98"/><path d="M32 43 v2 q-2.5 2.5 -5 .5 M32 45 q2.5 2.5 5 .5" stroke="#6b4a3a" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 39 l8 1 M12 44 l8 -1 M52 39 l-8 1 M52 44 l-8 -1" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".9"/>${_blush(41)}`,
+fox:`<path d="M10 33 L13 10 L28 22Z M54 33 L51 10 L36 22Z" fill="#e8763a"/><path d="M15 25 L16.5 16 L24 22Z M49 25 L47.5 16 L40 22Z" fill="#3b2a2a"/><path d="M12 33 Q32 18 52 33 Q50 56 32 58 Q14 56 12 33Z" fill="#f08a45"/><path d="M12 34 Q22 40 32 50 Q42 40 52 34 Q50 56 32 58 Q14 56 12 34Z" fill="#fff4e6"/>${_eye(24,35,3)}${_eye(40,35,3)}<ellipse cx="32" cy="48" rx="3.2" ry="2.4" fill="#2b2230"/><path d="M32 50 q-2 3 -4.5 1.5 M32 50 q2 3 4.5 1.5" stroke="#6b4a3a" stroke-width="1.2" fill="none" stroke-linecap="round"/>${_blush(43)}`,
+bunny:`<ellipse cx="23" cy="15" rx="6" ry="14" fill="#fff" transform="rotate(-8 23 15)"/><ellipse cx="41" cy="15" rx="6" ry="14" fill="#fff" transform="rotate(8 41 15)"/><ellipse cx="23" cy="16" rx="3" ry="9.5" fill="#ffc2cf" transform="rotate(-8 23 16)"/><ellipse cx="41" cy="16" rx="3" ry="9.5" fill="#ffc2cf" transform="rotate(8 41 16)"/><circle cx="32" cy="40" r="19" fill="#fff"/>${_eye(24.5,38,3)}${_eye(39.5,38,3)}<path d="M29.5 43.5 h5 l-2.5 3Z" fill="#ff8a98"/><path d="M32 46.5 v1.5 q-2.5 2.5 -5 .5 M32 48 q2.5 2.5 5 .5" stroke="#a37a8a" stroke-width="1.2" fill="none" stroke-linecap="round"/><rect x="30" y="49" width="2" height="3.4" rx=".8" fill="#fff" stroke="#e6d6e0" stroke-width=".6"/><rect x="32" y="49" width="2" height="3.4" rx=".8" fill="#fff" stroke="#e6d6e0" stroke-width=".6"/>${_blush(44)}`,
+bear:`<circle cx="15" cy="20" r="8" fill="#9a6a45"/><circle cx="49" cy="20" r="8" fill="#9a6a45"/><circle cx="15" cy="20" r="4" fill="#d9a77c"/><circle cx="49" cy="20" r="4" fill="#d9a77c"/><circle cx="32" cy="36" r="21" fill="#b67f52"/><ellipse cx="32" cy="43" rx="10.5" ry="8.5" fill="#efd2ae"/>${_eye(23.5,32,3.2)}${_eye(40.5,32,3.2)}<ellipse cx="32" cy="39.5" rx="3.6" ry="2.7" fill="#2b2230"/><path d="M32 42 v2.5 q-3 3 -6 .5 M32 44.5 q3 3 6 .5" stroke="#6b4a3a" stroke-width="1.3" fill="none" stroke-linecap="round"/>${_blush(40)}`,
+panda:`<circle cx="15" cy="20" r="8" fill="#2f2a33"/><circle cx="49" cy="20" r="8" fill="#2f2a33"/><circle cx="32" cy="36" r="21" fill="#fff"/><ellipse cx="23" cy="32" rx="6" ry="7.5" fill="#2f2a33" transform="rotate(20 23 32)"/><ellipse cx="41" cy="32" rx="6" ry="7.5" fill="#2f2a33" transform="rotate(-20 41 32)"/><circle cx="23.5" cy="32" r="3" fill="#fff"/><circle cx="40.5" cy="32" r="3" fill="#fff"/><circle cx="24" cy="32" r="1.9" fill="#2b2230"/><circle cx="40" cy="32" r="1.9" fill="#2b2230"/><circle cx="24.6" cy="31.2" r=".7" fill="#fff"/><circle cx="40.6" cy="31.2" r=".7" fill="#fff"/><ellipse cx="32" cy="41" rx="3.4" ry="2.5" fill="#2f2a33"/><path d="M32 43.5 v2 q-3 3 -6 .5 M32 45.5 q3 3 6 .5" stroke="#6b5a64" stroke-width="1.3" fill="none" stroke-linecap="round"/>${_blush(43)}`,
+hedgehog:`<path d="M9 36 L6 28 L13 29 L11 20 L18 24 L19 14 L25 21 L30 11 L34 20 L40 12 L42 22 L49 15 L48 25 L56 22 L53 31 L58 34 L53 38Z" fill="#6b4f3d"/><path d="M12 38 Q12 22 32 22 Q52 22 52 38 Q52 56 32 56 Q12 56 12 38Z" fill="#6b4f3d"/><path d="M17 40 Q18 29 32 29 Q46 29 47 40 Q47 54 32 54 Q17 54 17 40Z" fill="#f1d3ae"/>${_eye(25,39,2.9)}${_eye(39,39,2.9)}<ellipse cx="32" cy="46" rx="3" ry="2.3" fill="#2b2230"/><path d="M32 48.2 q-2.5 2.5 -5 .5 M32 48.2 q2.5 2.5 5 .5" stroke="#6b4a3a" stroke-width="1.2" fill="none" stroke-linecap="round"/>${_blush(46)}`,
+penguin:`<ellipse cx="32" cy="36" rx="19" ry="22" fill="#34415c"/><ellipse cx="32" cy="41" rx="13" ry="16" fill="#fff"/><ellipse cx="13.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(12 13.5 40)"/><ellipse cx="50.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(-12 50.5 40)"/>${_eye(25,30,3)}${_eye(39,30,3)}<path d="M27.5 36 Q32 33.5 36.5 36 Q32 42 27.5 36Z" fill="#f5a53a"/>${_blush(37)}<path d="M23 57 q4 4 8 0 M33 57 q4 4 8 0" stroke="#f5a53a" stroke-width="3" fill="none" stroke-linecap="round"/>`
+};
+function avatarSvg(id,size){
+  const k=AV_ART[id]?id:'owl';
+  return `<svg viewBox="0 0 64 64" width="${size||40}" height="${size||40}" style="display:block;border-radius:50%;flex-shrink:0" role="img" aria-label="${AV_NAMES[k]}"><circle cx="32" cy="32" r="32" fill="${AV_BG[k]}"/>${AV_ART[k]}</svg>`;
+}
+// Аватар участницы по имени (из списка участниц клуба)
+function avatarOf(name,size){
+  const m=(D.members||[]).find(m=>m.name===name);
+  return avatarSvg(m&&m.avatar,size);
+}
+
 // ══════════════════════════════════════════════
 //  LOCAL DATA (fallback when no Firebase)
 // ══════════════════════════════════════════════
 let D={profile:{name:'Участник',avatar:'У',isAdmin:false},books:[],statuses:{},
-       comments:{},quotes:{},questions:{},votes:{options:[]},members:[],announcements:[],progress:{},groupstatuses:{},ratings:{},adaptations:{},notes:{},
+       comments:{},quotes:{},questions:{},votes:{options:[]},members:[],announcements:[],progress:{},finished:{},goals:{},groupstatuses:{},ratings:{},adaptations:{},notes:{},
        config:{proCode:'',payInfo:{price:'',contact:'',details:'',payUrl:''},bookPayInfo:{}},suggestions:{},personalReviews:{}};
 
 function loadLocal(){
@@ -595,6 +632,8 @@ function loadLocal(){
   if(!D.members)D.members=[];
   if(!D.announcements)D.announcements=[];
   if(!D.progress)D.progress={};
+  if(!D.finished)D.finished={};
+  if(!D.goals)D.goals={};
   if(!D.profile)D.profile={name:'Участник',avatar:'У',isAdmin:false};
   if(!D.groupstatuses)D.groupstatuses={};
   if(!D.ratings)D.ratings={};
@@ -704,6 +743,9 @@ function setupListeners(){
   // Per-user data (statuses, progress) stored locally AND in firebase under user key
   const uKey=userKey();
   fbListen('userdata/'+uKey+'/statuses',val=>{D.statuses=val||{};if(curV==='book')renderBook(curBk);renderIfActive('profile');});
+  fbListen('userdata/'+uKey+'/finished',val=>{D.finished=val||{};renderIfActive('profile');});
+  fbListen('userdata/'+uKey+'/goals',val=>{D.goals=val||{};renderIfActive('profile');});
+  fbListen('userdata/'+uKey+'/onboarded',val=>{D.onboarded=!!val;D.onboardedLoaded=true;maybeOnboard();});
   fbListen('userdata/'+uKey+'/progress',val=>{D.progress=val||{};if(curV==='book')renderBook(curBk);renderIfActive('profile');});
 }
 
@@ -784,7 +826,7 @@ function paywallCard(section, bid){
   return '<div class="paywall-card">'
     +'<div class="paywall-lock">🔒</div>'
     +'<div class="paywall-title">Платный раздел</div>'
-    +'<div class="paywall-desc">'+x(section)+' доступен по подписке</div>'
+    +'<div class="paywall-desc">'+x(section)+' открывается один раз и остаётся у вас навсегда</div>'
     +'<div style="display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;">'
       +'<div class="pw-option pw-single">'
         +'<div class="pw-opt-label">Один конспект</div>'
@@ -1134,9 +1176,12 @@ function bTab(bid,tab,btn){
 
 function setSt(id,st){
   if(st===null)delete D.statuses[id];else D.statuses[id]=st;
+  // дата прочтения нужна для цели года и статистики по месяцам
+  if(st==='read'){if(!D.finished[id])D.finished[id]=today();}else delete D.finished[id];
   saveLocal();
   if(fbOk){
     fbSet('userdata/'+userKey()+'/statuses',D.statuses);
+    fbSet('userdata/'+userKey()+'/finished',D.finished);
     // Write groupstatuses so all participants see each other's counts
     if(!D.groupstatuses[id])D.groupstatuses[id]={};
     if(st===null){
@@ -1200,7 +1245,7 @@ function renderCmt(bid,c){
       ${mkRxns('reply',bid,r.id,r.reactions||{},c.id)}
     </div>`).join('');
   return`<div class="cmt">
-    <div class="cmt-by">${x(c.by||'Аноним')} <span class="cmt-date">· ${c.date?fmd(c.date):''}</span></div>
+    <div class="cmt-by" style="display:flex;align-items:center;gap:6px;">${avatarOf(c.by,22)}<span>${x(c.by||'Аноним')}</span> <span class="cmt-date">· ${c.date?fmd(c.date):''}</span></div>
     <div class="cmt-txt">${x(c.text)}</div>
     ${rxns}
     <div style="margin-top:7px;" class="row">
@@ -1489,7 +1534,7 @@ function renderMembersClub(){
   const mems=D.members||[];
   el.innerHTML=`<div class="mgrid2">
     ${mems.map(m=>`<div class="mcard">
-      <div class="mav">${(m.name||'?').charAt(0).toUpperCase()}</div>
+      <div class="mav" style="background:none;">${avatarSvg(m.avatar,46)}</div>
       <div style="font-size:.83rem;font-weight:600;">${x(m.name)}</div>
       ${m.role?`<div style="font-size:.72rem;color:var(--txl);margin-top:2px;">${x(m.role)}</div>`:''}
       ${m.isAdmin?'<div class="admin-badge">Организатор</div>':''}
@@ -1529,9 +1574,18 @@ function renderProfile(){
 
   document.getElementById('prof-body').innerHTML=`
     <div class="phdr">
-      <div class="av-lg">${(p.name||'У').charAt(0).toUpperCase()}</div>
+      <div class="av-lg">${avatarSvg(p.avatar,76)}</div>
       <div style="font-size:1.15rem;font-weight:700;margin-bottom:3px;">${x(p.name)}</div>
       ${p.isAdmin?'<div style="font-size:.75rem;background:rgba(255,255,255,.2);padding:2px 12px;border-radius:10px;display:inline-block;font-weight:600;">Организатор</div>':'<div style="font-size:.8rem;opacity:.75;">Участник · Выручай-комната</div>'}
+    </div>
+
+    ${renderGoalCard()}
+
+    <div class="card coll">
+      <div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')">
+        <h3>🐾 Мой аватар</h3><span class="coll-ico">▾</span>
+      </div>
+      <div class="coll-body">${avatarPicker(p.avatar)}</div>
     </div>
 
     <div class="card coll">
@@ -1566,6 +1620,8 @@ function renderProfile(){
     </div>`:''}
 
     ${buildPersonalStats(read)}
+    ${renderMyRatings()}
+    ${renderMyQuotes()}
 
     ${plist('✅ Прочитано',read)}
     ${plist('📖 Читаю',reading)}
@@ -1659,16 +1715,146 @@ function plist(title,books){
     </div>
   </div>`;
 }
+async function saveProfile(patch){
+  const me=await api('POST','/profile',patch);
+  ME.name=me.name;ME.avatar=me.avatar;
+  D.profile.name=me.name;D.profile.avatar=me.avatar;saveLocal();
+  syncNow();
+  return me;
+}
 async function saveName(){
   const n=document.getElementById('pname').value.trim();if(!n)return;
-  try{
-    const me=await api('POST','/profile',{name:n});
-    ME.name=me.name;ME.avatar=me.avatar;
-    D.profile.name=me.name;D.profile.avatar=me.avatar;saveLocal();
-    syncNow();
-  }catch(e){alert(e.message);}
+  try{await saveProfile({name:n});}catch(e){alert(e.message);}
   renderProfile();
 }
+async function pickAvatar(id){
+  try{await saveProfile({avatar:id});}catch(e){alert(e.message);return;}
+  renderProfile();
+  const g=document.getElementById('onb-avatars');if(g)g.innerHTML=avatarOptions(id,'pickOnbAvatar');
+}
+function avatarOptions(cur,fn){
+  return Object.keys(AV_ART).map(k=>`<div class="av-opt ${k===cur?'on':''}" onclick="${fn}('${k}')">${avatarSvg(k,52)}${AV_NAMES[k]}</div>`).join('');
+}
+function avatarPicker(cur){return`<div class="av-grid">${avatarOptions(cur,'pickAvatar')}</div>`;}
+
+// ── Цель года и статистика по месяцам ──
+let profYear=new Date().getFullYear();
+function finishedList(year){
+  return Object.entries(D.finished||{}).filter(([bid,d])=>D.statuses[bid]==='read'&&String(d).slice(0,4)===String(year)).map(([bid,d])=>({bid,d}));
+}
+function yearsWithData(){
+  const ys=new Set([new Date().getFullYear()]);
+  Object.entries(D.finished||{}).forEach(([bid,d])=>{if(D.statuses[bid]==='read')ys.add(+String(d).slice(0,4));});
+  Object.keys(D.goals||{}).forEach(y=>ys.add(+y));
+  return [...ys].filter(Boolean).sort((a,b)=>b-a);
+}
+function goalRing(done,goal){
+  const r=34,c=2*Math.PI*r,pct=goal?Math.min(1,done/goal):0;
+  return`<svg viewBox="0 0 80 80" width="96" height="96" role="img" aria-label="Прочитано ${done} из ${goal||'—'}">
+    <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--bdr)" stroke-width="8"/>
+    ${pct>0?`<circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--g)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(c*pct).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/>`:''}
+    <text x="40" y="38" text-anchor="middle" font-size="19" font-weight="700" fill="var(--rd)">${done}</text>
+    <text x="40" y="53" text-anchor="middle" font-size="9.5" fill="var(--txl)">${goal?'из '+goal:'книг'}</text>
+  </svg>`;
+}
+function monthBars(list){
+  const cnt=Array(12).fill(0);list.forEach(f=>{cnt[+f.d.slice(5,7)-1]++;});
+  const mx=Math.max(1,...cnt),W=300,H=84,bw=16,gap=(W-12*bw)/11,L='ЯФМАМИИАСОНД',N=MRU;
+  return`<svg viewBox="0 0 ${W} ${H+18}" width="100%" role="img" aria-label="Прочитано по месяцам">`+cnt.map((v,i)=>{
+    const h=v?Math.max(6,Math.round(v/mx*(H-14))):2,xx=i*(bw+gap),y=H-h;
+    return`<g><title>${N[i]}: ${v}</title>
+      <path d="M${xx} ${H} v${-(h-4)} q0 -4 4 -4 h${bw-8} q4 0 4 4 v${h-4}z" fill="${v?'var(--g)':'var(--bdr)'}"/>
+      ${v?`<text x="${xx+bw/2}" y="${y-3}" text-anchor="middle" font-size="9" fill="var(--rd)">${v}</text>`:''}
+      <text x="${xx+bw/2}" y="${H+13}" text-anchor="middle" font-size="9" fill="var(--txl)">${L[i]}</text></g>`;
+  }).join('')+`</svg>`;
+}
+function plural(n,f){const a=Math.abs(n)%100,b=a%10;return a>10&&a<20?f[2]:b>1&&b<5?f[1]:b===1?f[0]:f[2];}
+function renderGoalCard(){
+  const years=yearsWithData();if(!years.includes(profYear))profYear=years[0];
+  const list=finishedList(profYear),done=list.length,goal=+((D.goals||{})[profYear]||0);
+  const nowY=new Date().getFullYear(),m=new Date().getMonth();
+  let msg='Поставьте цель на год — так читать веселее 🎯';
+  if(goal){
+    if(done>=goal)msg='🎉 Цель выполнена! Можно поставить новую.';
+    else if(profYear===nowY){const left=goal-done,months=12-m;msg=`Осталось ${left} ${plural(left,['книга','книги','книг'])} — примерно ${(left/months).toFixed(1).replace('.0','')} в месяц, чтобы успеть`;}
+    else msg=`Выполнено ${Math.round(done/goal*100)}% цели`;
+  }
+  const undated=Object.keys(D.statuses).filter(b=>D.statuses[b]==='read'&&!D.finished[b]).length;
+  return`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3>🎯 Цель на год</h3>
+      <select onchange="profYear=+this.value;renderProfile()" style="width:auto;padding:4px 8px;">${years.map(y=>`<option ${y===profYear?'selected':''}>${y}</option>`).join('')}</select>
+    </div>
+    <div class="goal-ring">${goalRing(done,goal)}
+      <div style="flex:1;"><div style="font-size:.85rem;margin-bottom:8px;">${msg}</div>
+        <div class="row"><input id="goal-in" type="number" min="1" max="500" value="${goal||''}" placeholder="Сколько книг?" style="flex:1;"/><button class="btn bp sm" onclick="saveGoal()">Цель</button></div>
+      </div>
+    </div>
+    <div style="margin-top:12px;">${monthBars(list)}</div>
+    ${undated?`<div style="font-size:.72rem;color:var(--txl);margin-top:6px;">Ещё ${undated} прочитанных без даты — они не попали в график. Отметьте книгу «Прочитано» заново, чтобы записать дату.</div>`:''}
+  </div>`;
+}
+function saveGoal(){
+  const v=parseInt(document.getElementById('goal-in').value,10);
+  if(!(v>0&&v<=500)){alert('Введите число от 1 до 500');return;}
+  D.goals[profYear]=v;saveLocal();
+  if(fbOk)fbSet('userdata/'+userKey()+'/goals',D.goals);
+  renderProfile();
+}
+function renderMyRatings(){
+  const k=userKey();
+  const rated=D.books.filter(b=>D.ratings&&D.ratings[b.id]&&D.ratings[b.id][k]).sort((a,b)=>D.ratings[b.id][k]-D.ratings[a.id][k]);
+  if(!rated.length)return'';
+  return`<div class="card coll"><div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>⭐ Мои оценки (${rated.length})</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body">${rated.map(b=>`<div onclick="openBook('${b.id}')" style="cursor:pointer;display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:.85rem;"><span>${x(b.title)}</span><span style="color:var(--r);white-space:nowrap;">${'★'.repeat(D.ratings[b.id][k])}${'☆'.repeat(5-D.ratings[b.id][k])}</span></div>`).join('')}</div></div>`;
+}
+function renderMyQuotes(){
+  const mine=[];
+  Object.entries(D.quotes||{}).forEach(([bid,arr])=>(arr||[]).forEach(q=>{if(q.by===D.profile.name)mine.push({bid,q});}));
+  if(!mine.length)return'';
+  return`<div class="card coll"><div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>✨ Мои цитаты (${mine.length})</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body">${mine.map(({bid,q})=>{const b=D.books.find(b=>b.id===bid)||{};return`<div onclick="openBook('${bid}')" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--bdr);"><div style="font-size:.88rem;font-style:italic;">«${x(q.text)}»</div><div style="font-size:.72rem;color:var(--txl);margin-top:3px;">${x(b.title||'')}</div></div>`;}).join('')}</div></div>`;
+}
+
+// ── Вступление в клуб (бесплатно) ──
+let onbAvatar=null;
+function pickOnbAvatar(id){onbAvatar=id;document.getElementById('onb-avatars').innerHTML=avatarOptions(id,'pickOnbAvatar');}
+function maybeOnboard(){
+  if(!ME||!D.onboardedLoaded||D.onboarded)return;
+  onbAvatar=ME.avatar||'owl';
+  const el=document.getElementById('onb');
+  document.getElementById('onb-body').innerHTML=`
+    <h1>Добро пожаловать в «Выручай-комнату» 📚</h1>
+    <p style="color:var(--txl);margin-bottom:12px;">Вступление в клуб бесплатное. Вот что здесь можно:</p>
+    <ul style="padding-left:18px;margin-bottom:14px;">
+      <li>📖 следить за книгой месяца и голосовать за следующую</li>
+      <li>💬 обсуждать книги, отвечать на комментарии, делиться цитатами</li>
+      <li>⭐ ставить оценки и сохранять книги себе</li>
+      <li>🎯 ставить цель на год и смотреть, сколько удалось прочитать</li>
+      <li>📝 конспекты и аудио-разборы — платно, открываются навсегда</li>
+    </ul>
+    <h3>Выберите аватар</h3>
+    <div class="av-grid" id="onb-avatars">${avatarOptions(onbAvatar,'pickOnbAvatar')}</div>
+    <h3 style="margin-top:6px;">Как вас называть?</h3>
+    <input id="onb-name" value="${x(ME.name)}" maxlength="40" style="margin:6px 0 12px;"/>
+    <h3>Сколько книг хотите прочитать в ${new Date().getFullYear()} году?</h3>
+    <input id="onb-goal" type="number" min="1" max="500" value="12" style="margin:6px 0 16px;"/>
+    <button class="btn bp" style="width:100%;" onclick="finishOnboarding()">Вступить в клуб 🎉</button>
+    <div style="text-align:center;margin-top:10px;"><a style="font-size:.78rem;color:var(--txl);" onclick="skipOnboarding()">Пропустить</a></div>`;
+  el.classList.add('show');
+}
+async function finishOnboarding(){
+  const name=document.getElementById('onb-name').value.trim();
+  const goal=parseInt(document.getElementById('onb-goal').value,10);
+  try{await saveProfile({name:name||ME.name,avatar:onbAvatar});}catch(e){alert(e.message);return;}
+  if(goal>0&&goal<=500){D.goals[new Date().getFullYear()]=goal;await fbSet('userdata/'+userKey()+'/goals',D.goals);}
+  skipOnboarding();
+}
+function skipOnboarding(){
+  D.onboarded=true;fbSet('userdata/'+userKey()+'/onboarded',true);
+  document.getElementById('onb').classList.remove('show');renderProfile();
+}
+
 function saveProConfig(){
   if(!isAdmin())return;
   const code=(document.getElementById('cfg-code')||{}).value||'';
@@ -2226,7 +2412,15 @@ function renderProLanding(){
 //  NOTES / KONSPEKT
 // ══════════════════════════════════════════════
 function renderNote(bid){
-  if(!isPro(bid)){return paywallCard('Конспект книги', bid);}
+  if(!isPro(bid)){
+    const n=D.notes[bid];
+    const teaser=n&&n.toc&&n.toc.length?`<div class="card" style="margin-bottom:12px;">
+      <h3 style="margin-bottom:8px;">📋 В конспекте ${n.sections} ${plural(n.sections,['раздел','раздела','разделов'])}</h3>
+      <div style="font-size:.82rem;color:var(--txl);line-height:1.6;">${n.toc.slice(0,12).map(t=>`<div style="padding-left:${(t.level-1)*12}px;">${x(t.title)}</div>`).join('')}${n.toc.length>12?`<div>… и ещё ${n.toc.length-12}</div>`:''}</div>
+    </div>
+    ${n.preview?`<div class="card note-teaser"><div style="font-size:.7rem;font-weight:700;color:var(--g);margin-bottom:6px;">ОТРЫВОК — БЕСПЛАТНО</div><div class="note-body">${notionToHtml(n.preview)}</div></div>`:''}`:'';
+    return teaser+paywallCard('Конспект книги', bid);
+  }
   const n=D.notes[bid];
   const b=D.books.find(b=>b.id===bid)||{};
   if(!n||!n.content){

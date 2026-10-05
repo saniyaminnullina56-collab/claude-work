@@ -78,13 +78,14 @@ test('конспекты: без кода — заглушка, с верным 
   await s.call(admin, 'PUT', '/api/db/config', { value: { proCode: 'ALL', bookPayInfo: { b1: { code: 'ONE' } } } });
   assert.equal((await s.call(ann, 'GET', '/api/db/notes')).status, 403);
   let notes = (await s.call(ann, 'GET', '/api/notes')).data;
-  assert.deepEqual(notes.b1, { locked: true });
+  assert.equal(notes.b1.locked, true);
   assert.equal(JSON.stringify(notes).includes('ПЛАТНЫЙ'), false);
   assert.equal((await s.call(ann, 'POST', '/api/redeem', { code: 'wrong', bookId: 'b1' })).status, 403);
   assert.equal((await s.call(ann, 'POST', '/api/redeem', { code: 'one', bookId: 'b1' })).data.scope, 'b1');
   notes = (await s.call(ann, 'GET', '/api/notes')).data;
   assert.equal(notes.b1.content, 'ПЛАТНЫЙ ТЕКСТ');
-  assert.deepEqual(notes.b2, { locked: true });
+  assert.equal(notes.b2.locked, true);
+  assert.equal(JSON.stringify(notes).includes('ВТОРОЙ'), false, 'конспект без заголовков не отдаётся целиком');
   assert.equal((await s.call(bob, 'POST', '/api/redeem', { code: 'all' })).data.scope, '*');
   assert.equal((await s.call(bob, 'GET', '/api/notes')).data.b2.content, 'ВТОРОЙ');
   assert.equal((await s.call(ann, 'PUT', '/api/notes/b1', { content: 'x' })).status, 403);
@@ -148,7 +149,7 @@ test('профиль: имена уникальны, участницы видя
   assert.notEqual(dup.data.name, 'Анна');
   assert.equal((await s.call(bob, 'POST', '/api/profile', { name: 'анна' })).status, 409);
   const members = (await s.call(bob, 'GET', '/api/me') && await s.call(bob, 'POST', '/api/sync', {})).data.roots.members.value;
-  assert.ok(members.every(m => Object.keys(m).sort().join() === 'id,isAdmin,name,role'));
+  assert.ok(members.every(m => Object.keys(m).sort().join() === 'avatar,id,isAdmin,name,role'));
   s.close();
 });
 
@@ -189,17 +190,16 @@ test('бесплатно: всё, кроме конспектов и лично�
   await s.call(admin, 'PUT', '/api/db/config', { value: { proCode: 'ALL' } });
   // без оплаты: клубный каталог, обсуждения, голосование, оценки — доступны
   const books = (await s.call(ann, 'GET', '/api/db/books')).data.value;
-  assert.deepEqual(Object.keys(books), ['b1']);
+  assert.deepEqual(Object.keys(books).sort(), ['b1', 'p1'], 'витрина: личная библиотека видна в каталоге');
   assert.equal((await s.call(ann, 'POST', '/api/db/comments/b1', { value: { id: 'c1', text: 'hi', by: 'Анна' } })).status, 200);
   assert.equal((await s.call(ann, 'PUT', '/api/db/ratings/b1/u2', { value: 4 })).status, 200);
   // личная библиотека: чтение и запись закрыты
   assert.equal((await s.call(ann, 'GET', '/api/db/personalReviews/p1')).data.value, null);
   assert.equal((await s.call(ann, 'PUT', '/api/db/personalReviews/p1', { value: [{ by: 'Анна', text: 'x' }] })).status, 403);
   const roots = (await s.call(ann, 'POST', '/api/sync', {})).data.roots;
-  assert.equal(JSON.stringify(roots.books.value).includes('Личная'), false);
+  assert.equal(JSON.stringify(roots.personalReviews.value), 'null', 'отзывы закрыты');
   // после кода — открывается
   await s.call(ann, 'POST', '/api/redeem', { code: 'all' });
-  assert.deepEqual(Object.keys((await s.call(ann, 'GET', '/api/db/books')).data.value).sort(), ['b1', 'p1']);
   assert.equal((await s.call(ann, 'PUT', '/api/db/personalReviews/p1', { value: [{ by: 'Сания', text: 'отзыв' }, { by: 'Анна', text: 'моё' }] })).status, 200);
   s.close();
 });

@@ -30,6 +30,8 @@ export function openStore(file) {
       PRIMARY KEY (user_id, scope));
   `);
 
+  try { db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT 'owl'"); } catch { /* уже есть */ }
+
   const q = {
     getRoot: db.prepare('SELECT json, rev FROM tree WHERE root = ?'),
     putRoot: db.prepare(`INSERT INTO tree(root, json, rev) VALUES (?, ?, 1)
@@ -40,6 +42,7 @@ export function openStore(file) {
     getUser: db.prepare('SELECT * FROM users WHERE id = ?'),
     allUsers: db.prepare('SELECT * FROM users ORDER BY first_seen'),
     setName: db.prepare('UPDATE users SET name = ? WHERE id = ?'),
+    setAvatar: db.prepare('UPDATE users SET avatar = ? WHERE id = ?'),
     setNotify: db.prepare('UPDATE users SET notify = ? WHERE id = ?'),
     ents: db.prepare('SELECT scope FROM entitlements WHERE user_id = ?'),
     grant: db.prepare(`INSERT INTO entitlements(user_id, scope, granted_at, source) VALUES (?, ?, ?, ?)
@@ -113,6 +116,7 @@ export function openStore(file) {
     getUser: id => q.getUser.get(id) || null,
     allUsers: () => q.allUsers.all(),
     setName: (id, name) => q.setName.run(name, id),
+    setAvatar: (id, avatar) => q.setAvatar.run(avatar, id),
     setNotify: (id, on) => q.setNotify.run(on ? 1 : 0, id),
 
     // ── доступ к платным материалам ──

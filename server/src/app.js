@@ -8,6 +8,8 @@ import { verifyInitData } from './telegram.js';
 import { parsePath } from './store.js';
 import { checkRead, checkWrite, sanitizeConfig, ownKey, PUBLIC_READ } from './rules.js';
 import { createBot } from './bot.js';
+import { AVATARS } from './avatars.js';
+import { previewOf } from './notes-preview.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -61,7 +63,7 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
     } else row = store.touchUser({ ...tg, name: row.name });
     const isAdmin = config.adminIds.includes(row.id);
     const pro = isAdmin || store.entitlements(row.id).includes('*'); // платная личная библиотека
-    return { id: row.id, name: row.name, username: row.username, isAdmin, pro, key: ownKey(row) };
+    return { id: row.id, name: row.name, avatar: row.avatar, username: row.username, isAdmin, pro, key: ownKey(row) };
   }
 
   const entitled = (user, bid) => {
@@ -70,7 +72,7 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
     return e.includes('*') || (bid != null && e.includes(String(bid)));
   };
   const meOf = user => ({
-    id: user.id, key: user.key, name: user.name, avatar: user.name.charAt(0).toUpperCase(),
+    id: user.id, key: user.key, name: user.name, avatar: user.avatar,
     isAdmin: user.isAdmin, entitlements: store.entitlements(user.id),
   });
 
@@ -79,9 +81,6 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
   function rootValue(root, user) {
     let { value, rev } = store.get([root]);
     if (root === 'config') value = sanitizeConfig(value, user);
-    if (root === 'books' && value && !user.pro) { // личная библиотека — платная: книги и отзывы не отдаём
-      value = Object.fromEntries(Object.entries(value).filter(([, b]) => !(b && b.personal)));
-    }
     if (root === 'personalReviews' && !user.pro) value = null;
     if (root === 'userdata') value = value && value[user.key] !== undefined ? { [user.key]: value[user.key] } : null;
     return { value, rev };
@@ -98,7 +97,7 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
   }
 
   function listForRoot(root) {
-    return store.allUsers().map(u => ({ id: `u${u.id}`, name: u.name, role: u.role || '', isAdmin: config.adminIds.includes(u.id) }));
+    return store.allUsers().map(u => ({ id: `u${u.id}`, name: u.name, role: u.role || '', avatar: u.avatar, isAdmin: config.adminIds.includes(u.id) }));
   }
 
   function sync(user, known) {
@@ -170,7 +169,7 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
   function notesFor(user) {
     const notes = store.get(['notes']).value || {};
     const out = {};
-    for (const [bid, n] of Object.entries(notes)) out[bid] = entitled(user, bid) ? n : { locked: true };
+    for (const [bid, n] of Object.entries(notes)) out[bid] = entitled(user, bid) ? n : previewOf(n && n.content);
     return out;
   }
 
@@ -231,12 +230,19 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
       if (p === '/api/me' && method === 'GET') return send(req, res, 200, meOf(user));
 
       if (p === '/api/profile' && method === 'POST') {
-        const { name } = await readBody(req, 2000);
-        const n = String(name || '').trim().replace(/\s+/g, ' ');
-        if (n.length < 1 || n.length > 40) throw new HttpError(400, 'Имя: от 1 до 40 символов');
-        if (store.allUsers().some(u => u.id !== user.id && u.name.toLowerCase() === n.toLowerCase())) throw new HttpError(409, 'Такое имя уже занято');
-        store.setName(user.id, n);
-        return send(req, res, 200, meOf({ ...user, name: n }));
+        const body = await readBody(req, 2000);
+        const next = { ...user };
+        if (body.name !== undefined) {
+          const n = String(body.name || '').trim().replace(/\s+/g, ' ');
+          if (n.length < 1 || n.length > 40) throw new HttpError(400, 'Имя: от 1 до 40 символов');
+          if (store.allUsers().some(u => u.id !== user.id && u.name.toLowerCase() === n.toLowerCase())) throw new HttpError(409, 'Такое имя уже занято');
+          store.setName(user.id, n); next.name = n;
+        }
+        if (body.avatar !== undefined) {
+          if (!AVATARS.includes(body.avatar)) throw new HttpError(400, 'Неизвестный аватар');
+          store.setAvatar(user.id, body.avatar); next.avatar = body.avatar;
+        }
+        return send(req, res, 200, meOf(next));
       }
 
       if (p === '/api/sync' && method === 'POST') {
