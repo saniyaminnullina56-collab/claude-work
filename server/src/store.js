@@ -31,6 +31,7 @@ export function openStore(file) {
   `);
 
   try { db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT 'owl'"); } catch { /* уже есть */ }
+  db.exec("UPDATE users SET avatar = 'tiger' WHERE avatar = 'panda'"); // панду заменил тигр
 
   const q = {
     getRoot: db.prepare('SELECT json, rev FROM tree WHERE root = ?'),

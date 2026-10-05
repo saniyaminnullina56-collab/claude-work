@@ -412,6 +412,7 @@ body.dark .stars span.on{color:#d4a030;}
   <div class="pg">
     <div class="offline-warn" id="offline-warn">⚠️ Нет связи с сервером клуба. Изменения не сохранятся, пока связь не вернётся.</div>
     <div id="hm-hero"></div>
+    <div id="hm-channel"></div>
     <div id="hm-ann"></div>
     <div class="stat-row" id="hm-stats"></div>
     <h2>✨ Цитаты участников</h2>
@@ -590,8 +591,8 @@ setInterval(()=>{if(!document.hidden)syncNow();},5000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow();});
 
 // ── АВАТАРЫ: оригинальные рисунки (id хранится на сервере) ──
-const AV_NAMES={owl:'Сова',kitten:'Котёнок',fox:'Лисёнок',bunny:'Зайка',bear:'Медвежонок',panda:'Панда',hedgehog:'Ёжик',penguin:'Пингвин'};
-const AV_BG={owl:'#f6e3c8',kitten:'#fde2d3',fox:'#fdebd0',bunny:'#e8def8',bear:'#efe0cf',panda:'#d9ebf0',hedgehog:'#e3efd9',penguin:'#d8e8f5'};
+const AV_NAMES={owl:'Сова',kitten:'Котёнок',fox:'Лисёнок',bunny:'Зайка',bear:'Медвежонок',tiger:'Тигрёнок',hedgehog:'Ёжик',penguin:'Пингвин',wolf:'Волчонок'};
+const AV_BG={owl:'#f6e3c8',kitten:'#fde2d3',fox:'#fdebd0',bunny:'#e8def8',bear:'#efe0cf',tiger:'#fdecc8',hedgehog:'#e3efd9',penguin:'#d8e8f5',wolf:'#dde4ee'};
 const _eye=(cx,cy,r=3)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#2b2230"/><circle cx="${cx+r*.35}" cy="${cy-r*.4}" r="${r*.38}" fill="#fff"/>`;
 const _blush=(y=40)=>`<ellipse cx="20" cy="${y}" rx="3.6" ry="2.4" fill="#ff9aa8" opacity=".55"/><ellipse cx="44" cy="${y}" rx="3.6" ry="2.4" fill="#ff9aa8" opacity=".55"/>`;
 const AV_ART={
@@ -600,9 +601,10 @@ kitten:`<path d="M13 30 L15 11 L29 21Z M51 30 L49 11 L35 21Z" fill="#e8964f"/><p
 fox:`<path d="M10 33 L13 10 L28 22Z M54 33 L51 10 L36 22Z" fill="#e8763a"/><path d="M15 25 L16.5 16 L24 22Z M49 25 L47.5 16 L40 22Z" fill="#3b2a2a"/><path d="M12 33 Q32 18 52 33 Q50 56 32 58 Q14 56 12 33Z" fill="#f08a45"/><path d="M12 34 Q22 40 32 50 Q42 40 52 34 Q50 56 32 58 Q14 56 12 34Z" fill="#fff4e6"/>${_eye(24,35,3)}${_eye(40,35,3)}<ellipse cx="32" cy="48" rx="3.2" ry="2.4" fill="#2b2230"/><path d="M32 50 q-2 3 -4.5 1.5 M32 50 q2 3 4.5 1.5" stroke="#6b4a3a" stroke-width="1.2" fill="none" stroke-linecap="round"/>${_blush(43)}`,
 bunny:`<ellipse cx="23" cy="15" rx="6" ry="14" fill="#fff" transform="rotate(-8 23 15)"/><ellipse cx="41" cy="15" rx="6" ry="14" fill="#fff" transform="rotate(8 41 15)"/><ellipse cx="23" cy="16" rx="3" ry="9.5" fill="#ffc2cf" transform="rotate(-8 23 16)"/><ellipse cx="41" cy="16" rx="3" ry="9.5" fill="#ffc2cf" transform="rotate(8 41 16)"/><circle cx="32" cy="40" r="19" fill="#fff"/>${_eye(24.5,38,3)}${_eye(39.5,38,3)}<path d="M29.5 43.5 h5 l-2.5 3Z" fill="#ff8a98"/><path d="M32 46.5 v1.5 q-2.5 2.5 -5 .5 M32 48 q2.5 2.5 5 .5" stroke="#a37a8a" stroke-width="1.2" fill="none" stroke-linecap="round"/><rect x="30" y="49" width="2" height="3.4" rx=".8" fill="#fff" stroke="#e6d6e0" stroke-width=".6"/><rect x="32" y="49" width="2" height="3.4" rx=".8" fill="#fff" stroke="#e6d6e0" stroke-width=".6"/>${_blush(44)}`,
 bear:`<circle cx="15" cy="20" r="8" fill="#9a6a45"/><circle cx="49" cy="20" r="8" fill="#9a6a45"/><circle cx="15" cy="20" r="4" fill="#d9a77c"/><circle cx="49" cy="20" r="4" fill="#d9a77c"/><circle cx="32" cy="36" r="21" fill="#b67f52"/><ellipse cx="32" cy="43" rx="10.5" ry="8.5" fill="#efd2ae"/>${_eye(23.5,32,3.2)}${_eye(40.5,32,3.2)}<ellipse cx="32" cy="39.5" rx="3.6" ry="2.7" fill="#2b2230"/><path d="M32 42 v2.5 q-3 3 -6 .5 M32 44.5 q3 3 6 .5" stroke="#6b4a3a" stroke-width="1.3" fill="none" stroke-linecap="round"/>${_blush(40)}`,
-panda:`<circle cx="15" cy="20" r="8" fill="#2f2a33"/><circle cx="49" cy="20" r="8" fill="#2f2a33"/><circle cx="32" cy="36" r="21" fill="#fff"/><ellipse cx="23" cy="32" rx="6" ry="7.5" fill="#2f2a33" transform="rotate(20 23 32)"/><ellipse cx="41" cy="32" rx="6" ry="7.5" fill="#2f2a33" transform="rotate(-20 41 32)"/><circle cx="23.5" cy="32" r="3" fill="#fff"/><circle cx="40.5" cy="32" r="3" fill="#fff"/><circle cx="24" cy="32" r="1.9" fill="#2b2230"/><circle cx="40" cy="32" r="1.9" fill="#2b2230"/><circle cx="24.6" cy="31.2" r=".7" fill="#fff"/><circle cx="40.6" cy="31.2" r=".7" fill="#fff"/><ellipse cx="32" cy="41" rx="3.4" ry="2.5" fill="#2f2a33"/><path d="M32 43.5 v2 q-3 3 -6 .5 M32 45.5 q3 3 6 .5" stroke="#6b5a64" stroke-width="1.3" fill="none" stroke-linecap="round"/>${_blush(43)}`,
+tiger:`<circle cx="16" cy="19" r="8" fill="#e8913d"/><circle cx="48" cy="19" r="8" fill="#e8913d"/><circle cx="16" cy="19" r="4" fill="#fff1e0"/><circle cx="48" cy="19" r="4" fill="#fff1e0"/><circle cx="32" cy="36" r="21" fill="#f2a24a"/><path d="M32 16 v8 M25 17.5 l2 6.5 M39 17.5 l-2 6.5 M12.5 31 l5 1.5 M11.5 38 l5 .5 M51.5 31 l-5 1.5 M52.5 38 l-5 .5" stroke="#3a2a22" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="32" cy="44" rx="11" ry="8.5" fill="#fff4e6"/>${_eye(23.5,33,3.2)}${_eye(40.5,33,3.2)}<path d="M28.5 39 h7 l-3.5 4Z" fill="#e0707f"/><path d="M32 43 v2.5 q-3 3 -6 .5 M32 45.5 q3 3 6 .5" stroke="#6b4a3a" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M13 44 l8 -1 M13 49 l8 -2 M51 44 l-8 -1 M51 49 l-8 -2" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".9"/>${_blush(42)}`,
 hedgehog:`<path d="M9 36 L6 28 L13 29 L11 20 L18 24 L19 14 L25 21 L30 11 L34 20 L40 12 L42 22 L49 15 L48 25 L56 22 L53 31 L58 34 L53 38Z" fill="#6b4f3d"/><path d="M12 38 Q12 22 32 22 Q52 22 52 38 Q52 56 32 56 Q12 56 12 38Z" fill="#6b4f3d"/><path d="M17 40 Q18 29 32 29 Q46 29 47 40 Q47 54 32 54 Q17 54 17 40Z" fill="#f1d3ae"/>${_eye(25,39,2.9)}${_eye(39,39,2.9)}<ellipse cx="32" cy="46" rx="3" ry="2.3" fill="#2b2230"/><path d="M32 48.2 q-2.5 2.5 -5 .5 M32 48.2 q2.5 2.5 5 .5" stroke="#6b4a3a" stroke-width="1.2" fill="none" stroke-linecap="round"/>${_blush(46)}`,
-penguin:`<ellipse cx="32" cy="36" rx="19" ry="22" fill="#34415c"/><ellipse cx="32" cy="41" rx="13" ry="16" fill="#fff"/><ellipse cx="13.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(12 13.5 40)"/><ellipse cx="50.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(-12 50.5 40)"/>${_eye(25,30,3)}${_eye(39,30,3)}<path d="M27.5 36 Q32 33.5 36.5 36 Q32 42 27.5 36Z" fill="#f5a53a"/>${_blush(37)}<path d="M23 57 q4 4 8 0 M33 57 q4 4 8 0" stroke="#f5a53a" stroke-width="3" fill="none" stroke-linecap="round"/>`
+penguin:`<ellipse cx="32" cy="36" rx="19" ry="22" fill="#34415c"/><ellipse cx="32" cy="41" rx="13" ry="16" fill="#fff"/><ellipse cx="13.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(12 13.5 40)"/><ellipse cx="50.5" cy="40" rx="4" ry="10" fill="#2a3550" transform="rotate(-12 50.5 40)"/>${_eye(25,30,3)}${_eye(39,30,3)}<path d="M27.5 36 Q32 33.5 36.5 36 Q32 42 27.5 36Z" fill="#f5a53a"/>${_blush(37)}<path d="M23 57 q4 4 8 0 M33 57 q4 4 8 0" stroke="#f5a53a" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+wolf:`<path d="M10 34 L12 8 L29 22Z M54 34 L52 8 L35 22Z" fill="#6f7c8c"/><path d="M15 26 L16 15 L24 22Z M49 26 L48 15 L40 22Z" fill="#c9a0a8"/><path d="M11 34 Q32 15 53 34 Q52 57 32 59 Q12 57 11 34Z" fill="#8d9aab"/><path d="M13 38 Q23 40 32 52 Q41 40 51 38 Q50 57 32 59 Q14 57 13 38Z" fill="#e6ebf1"/><path d="M32 20 v6 M26 21.5 l1.5 4.5 M38 21.5 l-1.5 4.5" stroke="#6f7c8c" stroke-width="2" stroke-linecap="round"/>${_eye(24,35,3)}${_eye(40,35,3)}<ellipse cx="32" cy="48.5" rx="3.6" ry="2.7" fill="#2b2230"/><path d="M32 51 q-2.5 3 -5 1.5 M32 51 q2.5 3 5 1.5" stroke="#5a6574" stroke-width="1.2" fill="none" stroke-linecap="round"/>${_blush(43)}`
 };
 function avatarSvg(id,size){
   const k=AV_ART[id]?id:'owl';
@@ -887,6 +889,9 @@ function isAdmin(){return !!(ME&&ME.isAdmin);}
 //  HOME
 // ══════════════════════════════════════════════
 function renderHome(){
+  const ch=(D.config&&D.config.channelUrl)||'';
+  const chEl=document.getElementById('hm-channel');
+  if(chEl)chEl.innerHTML=/^https:\/\/t\.me\//.test(ch)?`<a class="btn bg2" href="${x(ch)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin:10px 0;" onclick="if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.openTelegramLink(this.href);return false;}">📢 Канал клуба: анонсы и новости</a>`:'';
   const now=new Date(),ym=yyyymm(now);
   const cur=D.books.find(b=>b.readingMonth===ym);
   const endOfMonth=new Date(now.getFullYear(),now.getMonth()+1,0);
@@ -2600,12 +2605,24 @@ boot();
 // Организатор: уведомление участницам через бота
 function renderBroadcastCard(){
   return `<div class="card coll">
+    <div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>📢 Ссылка на канал</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body" style="padding-top:10px;">
+      <div style="font-size:.78rem;color:var(--txl);margin-bottom:8px;">Одна постоянная ссылка на ваш канал с анонсами. Кнопка появится на главной у всех участниц.</div>
+      <div class="row"><input id="ch-url" value="${x((D.config&&D.config.channelUrl)||'')}" placeholder="https://t.me/ваш_канал" style="flex:1;"/><button class="btn bp sm" onclick="saveChannel()">Сохранить</button></div>
+    </div></div>
+  `+`<div class="card coll">
     <div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>🔔 Уведомление участницам</h3><span class="coll-ico">▾</span></div>
     <div class="coll-body" style="padding-top:10px;">
       <div style="font-size:.78rem;color:var(--txl);margin-bottom:8px;">Сообщение придёт от бота тем, кто его запускал и не отключил уведомления.</div>
       <textarea id="bc-text" rows="3" placeholder="Например: Книга месяца — «…». Обсуждение 15-го!"></textarea>
       <button class="btn bp sm" style="margin-top:8px;" onclick="sendBroadcast()">Отправить</button>
     </div></div>`;
+}
+function saveChannel(){
+  const v=(document.getElementById('ch-url').value||'').trim();
+  if(v&&!/^https:\/\/t\.me\/[\w+\/-]+$/.test(v)){alert('Ссылка должна начинаться с https://t.me/');return;}
+  D.config.channelUrl=v;saveLocal();
+  fbSet('config/channelUrl',v||null);renderHome();
 }
 async function sendBroadcast(){
   const t=(document.getElementById('bc-text')||{}).value||'';

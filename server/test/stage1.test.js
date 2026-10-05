@@ -34,6 +34,9 @@ test('аватар: по умолчанию сова, меняется, неиз
   const s = await boot();
   assert.equal((await s.call('dev 2|Anna', 'GET', '/api/me')).data.avatar, 'owl');
   assert.equal((await s.call('dev 2|Anna', 'POST', '/api/profile', { avatar: 'kitten' })).data.avatar, 'kitten');
+  assert.equal((await s.call('dev 2|Anna', 'POST', '/api/profile', { avatar: 'wolf' })).data.avatar, 'wolf');
+  assert.equal((await s.call('dev 2|Anna', 'POST', '/api/profile', { avatar: 'panda' })).status, 400, 'панда заменена тигром');
+  await s.call('dev 2|Anna', 'POST', '/api/profile', { avatar: 'kitten' });
   assert.equal((await s.call('dev 2|Anna', 'POST', '/api/profile', { avatar: '<script>' })).status, 400);
   const members = (await s.call('dev 3|Bob', 'POST', '/api/sync', {})).data.roots.members.value;
   assert.equal(members.find(m => m.name === 'Anna').avatar, 'kitten');
