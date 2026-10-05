@@ -1,0 +1,14 @@
+{
+  "name": "bookclub-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js",
+    "import:notes": "node scripts/import-notes.js",
+    "import:firebase": "node scripts/import-firebase.js",
+    "bot:setup": "node scripts/setup-bot.js"
+  }
+}
