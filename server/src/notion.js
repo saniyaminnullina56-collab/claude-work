@@ -1,5 +1,6 @@
 // Синхронизация конспектов из Notion (только чтение): страницы под «Читальней» → тексты конспектов в базе.
 import { cleanNote } from './notes-clean.js';
+import { toks } from './text-match.js';
 
 const API = 'https://api.notion.com/v1';
 const SECTION_RE = /^конспекты по прочитанным книгам/i;
@@ -74,9 +75,6 @@ export async function blocksToMarkdown(blocks, getChildren) {
 }
 
 // ── сопоставление страницы с книгой каталога ──
-const norm = s => String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-const toks = s => norm(s).split(' ').filter(w => w.length > 2).map(w => w.slice(0, 5));
-
 export function matchBook(pageTitle, books) {
   const pt = new Set(toks(pageTitle));
   let best = null;
