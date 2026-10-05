@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/habits.js"></script>
 <script>
   // Код доступа и пароли больше не хранятся в браузере: всё проверяет сервер.
   const DEFAULT_PRO_CODE = "";
@@ -139,6 +140,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--g);border-color:
 .onb li{margin:6px 0;font-size:.88rem;line-height:1.45;}
 .note-teaser{position:relative;max-height:260px;overflow:hidden;}
 .note-teaser::after{content:'';position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(transparent,var(--card));}
+.hb-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--bdr);}
+.hb-check{width:38px;height:38px;border-radius:50%;border:2px solid var(--g);background:transparent;font-size:1.1rem;cursor:pointer;flex-shrink:0;color:#fff;display:flex;align-items:center;justify-content:center;}
+.hb-check.on{background:var(--g);}
+.hb-check.off{border-color:var(--bdr);cursor:default;}
+.hb-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:260px;}
+.hb-cell{aspect-ratio:1;border-radius:5px;background:var(--bdr);border:2px solid transparent;font-size:.55rem;color:var(--txl);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;}
+.hb-cell.done{background:var(--g);color:#fff;}
+.hb-cell.na{background:transparent;border:1px dashed var(--bdr);cursor:default;}
+.hb-cell.future{background:transparent;cursor:default;opacity:.35;}
+.hb-cell.today{border-color:var(--rd);}
+.hb-emo{background:var(--card);border:2px solid var(--bdr);border-radius:10px;font-size:1.2rem;padding:4px 7px;cursor:pointer;}
+.hb-emo.on{border-color:var(--r);background:var(--bgd);}
+.hb-day{border:2px solid var(--bdr);border-radius:8px;background:var(--card);padding:5px 8px;font-size:.75rem;cursor:pointer;color:var(--txl);}
+.hb-day.on{border-color:var(--g);background:var(--g);color:#fff;}
 .av-lg{width:76px;height:76px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;margin:0 auto 10px;border:2px solid rgba(255,255,255,.4);}
 
 /* ── COMMENTS ── */
@@ -610,6 +625,13 @@ function avatarSvg(id,size){
   const k=AV_ART[id]?id:'owl';
   return `<svg viewBox="0 0 64 64" width="${size||40}" height="${size||40}" style="display:block;border-radius:50%;flex-shrink:0" role="img" aria-label="${AV_NAMES[k]}"><circle cx="32" cy="32" r="32" fill="${AV_BG[k]}"/>${AV_ART[k]}</svg>`;
 }
+// Аватар с «состоянием»: sleepy — сонный, ok — обычный, happy — бодрый, glow — сияет
+function avatarMoodHtml(id,size,mood){
+  const base=avatarSvg(id,size);
+  const st={sleepy:'filter:grayscale(.7) brightness(.92);opacity:.85;',ok:'',happy:'box-shadow:0 0 0 3px #4caf7d;',glow:'box-shadow:0 0 0 3px #f5c542,0 0 16px 4px rgba(245,197,66,.65);'}[mood]||'';
+  const badge={sleepy:'💤',ok:'',happy:'😊',glow:'✨'}[mood]||'';
+  return `<span style="position:relative;display:inline-block;width:${size}px;height:${size}px;border-radius:50%;${st}">${base}${badge?`<span style="position:absolute;right:-6px;top:-6px;font-size:${Math.round(size*.3)}px;line-height:1;">${badge}</span>`:''}</span>`;
+}
 // Аватар участницы по имени (из списка участниц клуба)
 function avatarOf(name,size){
   const m=(D.members||[]).find(m=>m.name===name);
@@ -620,7 +642,7 @@ function avatarOf(name,size){
 //  LOCAL DATA (fallback when no Firebase)
 // ══════════════════════════════════════════════
 let D={profile:{name:'Участник',avatar:'У',isAdmin:false},books:[],statuses:{},
-       comments:{},quotes:{},questions:{},votes:{options:[]},members:[],announcements:[],progress:{},finished:{},goals:{},groupstatuses:{},ratings:{},adaptations:{},notes:{},
+       comments:{},quotes:{},questions:{},votes:{options:[]},members:[],announcements:[],progress:{},finished:{},goals:{},habits:[],habitlog:{},groupstatuses:{},ratings:{},adaptations:{},notes:{},
        config:{proCode:'',payInfo:{price:'',contact:'',details:'',payUrl:''},bookPayInfo:{}},suggestions:{},personalReviews:{}};
 
 function loadLocal(){
@@ -636,6 +658,8 @@ function loadLocal(){
   if(!D.progress)D.progress={};
   if(!D.finished)D.finished={};
   if(!D.goals)D.goals={};
+  if(!D.habits)D.habits=[];
+  if(!D.habitlog)D.habitlog={};
   if(!D.profile)D.profile={name:'Участник',avatar:'У',isAdmin:false};
   if(!D.groupstatuses)D.groupstatuses={};
   if(!D.ratings)D.ratings={};
@@ -746,6 +770,8 @@ function setupListeners(){
   const uKey=userKey();
   fbListen('userdata/'+uKey+'/statuses',val=>{D.statuses=val||{};if(curV==='book')renderBook(curBk);renderIfActive('profile');});
   fbListen('userdata/'+uKey+'/finished',val=>{D.finished=val||{};renderIfActive('profile');});
+  fbListen('userdata/'+uKey+'/habits',val=>{D.habits=Array.isArray(val)?val:(val?Object.values(val):[]);renderIfActive('profile');});
+  fbListen('userdata/'+uKey+'/habitlog',val=>{D.habitlog=val||{};renderIfActive('profile');});
   fbListen('userdata/'+uKey+'/goals',val=>{D.goals=val||{};renderIfActive('profile');});
   fbListen('userdata/'+uKey+'/onboarded',val=>{D.onboarded=!!val;D.onboardedLoaded=true;maybeOnboard();});
   fbListen('userdata/'+uKey+'/progress',val=>{D.progress=val||{};if(curV==='book')renderBook(curBk);renderIfActive('profile');});
@@ -1579,10 +1605,12 @@ function renderProfile(){
 
   document.getElementById('prof-body').innerHTML=`
     <div class="phdr">
-      <div class="av-lg">${avatarSvg(p.avatar,76)}</div>
+      <div class="av-lg" style="overflow:visible;">${avatarMoodHtml(p.avatar,76,Habits.mood(D.habits,D.habitlog,today()).mood)}</div>
       <div style="font-size:1.15rem;font-weight:700;margin-bottom:3px;">${x(p.name)}</div>
       ${p.isAdmin?'<div style="font-size:.75rem;background:rgba(255,255,255,.2);padding:2px 12px;border-radius:10px;display:inline-block;font-weight:600;">Организатор</div>':'<div style="font-size:.8rem;opacity:.75;">Участник · Выручай-комната</div>'}
     </div>
+
+    ${renderHabitsCard()}
 
     ${renderGoalCard()}
 
@@ -1741,6 +1769,81 @@ function avatarOptions(cur,fn){
   return Object.keys(AV_ART).map(k=>`<div class="av-opt ${k===cur?'on':''}" onclick="${fn}('${k}')">${avatarSvg(k,52)}${AV_NAMES[k]}</div>`).join('');
 }
 function avatarPicker(cur){return`<div class="av-grid">${avatarOptions(cur,'pickAvatar')}</div>`;}
+
+// ── Привычки и состояние аватара ──
+const MOODS={sleepy:['😴 Аватар заскучал','Отметьте привычки — и он взбодрится'],ok:['🙂 Аватар в норме','Отмечайте привычки каждый день'],happy:['😊 Аватар бодр','Так держать!'],glow:['✨ Аватар сияет','Вы в потоке — серия идёт']};
+const HB_EMOJI=['📖','💧','🏃','🧘','😴','✍️','🥗','🌿'];
+const HB_DAYS=[[1,'Пн'],[2,'Вт'],[3,'Ср'],[4,'Чт'],[5,'Пт'],[6,'Сб'],[0,'Вс']];
+let hbOpen={}, hbNew={emoji:'📖',days:[]};
+function saveHabits(){
+  saveLocal();
+  if(fbOk){fbSet('userdata/'+userKey()+'/habits',D.habits);fbSet('userdata/'+userKey()+'/habitlog',D.habitlog);}
+  renderProfile();
+}
+function renderHabitsCard(){
+  const t=today(),active=D.habits.filter(h=>!h.archivedAt);
+  const m=Habits.mood(D.habits,D.habitlog,t),lv=Habits.level(Habits.totalDone(D.habits,D.habitlog));
+  const txt=m.empty?['🌱 Начните с первой привычки','Аватар будет радоваться вашим успехам']:MOODS[m.mood];
+  const pct=lv.next?Math.round(lv.into/lv.need*100):100;
+  const rows=active.map(h=>{
+    const sched=Habits.isScheduled(h,t),done=Habits.doneOn(D.habitlog,h,t),st=Habits.streak(h,D.habitlog,t),open=!!hbOpen[h.id];
+    return `<div class="hb-row">
+      <button class="hb-check ${done?'on':''} ${sched?'':'off'}" ${sched?`onclick="toggleHabit('${x(h.id)}','${t}')"`:'disabled'} aria-label="${x(h.name)}: ${done?'выполнено':'отметить'}">${done?'✓':''}</button>
+      <div style="flex:1;min-width:0;" onclick="hbOpen['${x(h.id)}']=!hbOpen['${x(h.id)}'];renderProfile()">
+        <div style="font-size:.9rem;font-weight:600;${sched?'':'color:var(--txl);'}">${x(h.emoji||'✅')} ${x(h.name)}</div>
+        <div style="font-size:.72rem;color:var(--txl);">${sched?'':'не сегодня · '}${st?`🔥 ${st} ${plural(st,['день','дня','дней'])} подряд`:'серия начнётся сегодня'} · ${open?'скрыть':'трекер'}</div></div></div>
+      ${open?habitTracker(h,t):''}`;
+  }).join('');
+  return `<div class="card">
+    <h3 style="margin-bottom:10px;">🌱 Мои привычки</h3>
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:10px;">
+      <div style="padding:6px;">${avatarMoodHtml(D.profile.avatar,64,m.mood)}</div>
+      <div style="flex:1;"><div style="font-weight:700;font-size:.92rem;">${txt[0]}</div><div style="font-size:.78rem;color:var(--txl);margin-bottom:6px;">${txt[1]}${m.empty?'':` · за 7 дней: ${m.done} из ${m.scheduled}`}</div>
+        <div style="font-size:.72rem;color:var(--txl);">Уровень ${lv.level} · ${lv.title}</div>
+        <div style="height:6px;background:var(--bdr);border-radius:3px;overflow:hidden;margin-top:3px;" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="height:100%;width:${pct}%;background:var(--g);"></div></div>
+        <div style="font-size:.66rem;color:var(--txl);margin-top:2px;">${lv.next?`ещё ${lv.next-lv.xp} ${plural(lv.next-lv.xp,['отметка','отметки','отметок'])} до следующего уровня`:'максимальный уровень'}</div></div>
+    </div>
+    ${rows||'<div class="empty" style="padding:8px 0;">Привычек пока нет — добавьте первую ниже</div>'}
+    ${active.length<Habits.MAX_HABITS?`<details style="margin-top:10px;"${active.length?'':' open'}><summary style="font-size:.85rem;cursor:pointer;font-weight:600;">➕ Новая привычка</summary>
+      <input id="hb-name" maxlength="40" placeholder="Например: читать 20 минут" style="margin:8px 0;"/>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${HB_EMOJI.map(e=>`<button class="hb-emo ${hbNew.emoji===e?'on':''}" onclick="hbNew.emoji='${e}';renderProfile()" aria-label="значок ${e}">${e}</button>`).join('')}</div>
+      <div style="font-size:.72rem;color:var(--txl);margin-bottom:4px;">Дни (если не выбрать — каждый день):</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">${HB_DAYS.map(([n,l])=>`<button class="hb-day ${hbNew.days.includes(n)?'on':''}" onclick="toggleNewDay(${n})">${l}</button>`).join('')}</div>
+      <button class="btn bp sm" onclick="addHabit()">Добавить привычку</button></details>`:''}
+  </div>`;
+}
+function toggleNewDay(n){const i=hbNew.days.indexOf(n);if(i>=0)hbNew.days.splice(i,1);else hbNew.days.push(n);const nm=(document.getElementById('hb-name')||{}).value;renderProfile();const el=document.getElementById('hb-name');if(el&&nm)el.value=nm;const d=el&&el.closest('details');if(d)d.open=true;}
+function habitTracker(h,t){
+  const cells=Habits.grid(h,D.habitlog,t),hdr=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  const back=Habits.addDays(t,-Habits.MAX_BACKFILL);
+  return `<div style="padding:4px 0 12px 48px;">
+    <div class="hb-grid" role="grid" aria-label="Трекер: ${x(h.name)}, последние 4 недели">${hdr.map(d=>`<div style="font-size:.6rem;color:var(--txl);text-align:center;">${d}</div>`).join('')}
+      ${cells.map(c=>{const can=!c.future&&c.day>=back&&c.scheduled;const cls=c.future?'future':!c.scheduled?'na':c.done?'done':'';
+        return `<button class="hb-cell ${cls} ${c.today?'today':''}" ${can?`onclick="toggleHabit('${x(h.id)}','${c.day}')"`:'disabled'} title="${c.day}${c.done?': выполнено':c.scheduled&&!c.future?': пропущено':''}" aria-label="${c.day}: ${c.done?'выполнено':c.scheduled?'не выполнено':'не по расписанию'}">${c.day.slice(8)}</button>`;}).join('')}
+    </div>
+    <div style="font-size:.72rem;color:var(--txl);margin-top:6px;">За 4 недели: ${Habits.monthRate(h,D.habitlog,t)}% · отметить можно за последние ${Habits.MAX_BACKFILL} дней</div>
+    <button class="btn bg2 sm" style="margin-top:6px;" onclick="deleteHabit('${x(h.id)}')">Удалить привычку</button></div>`;
+}
+function toggleHabit(id,day){
+  D.habitlog=Habits.toggle(D.habitlog,id,day,today());
+  saveHabits();
+}
+function addHabit(){
+  const el=document.getElementById('hb-name');
+  const h=Habits.newHabit({name:el&&el.value,emoji:hbNew.emoji,days:hbNew.days},today());
+  if(!h){alert('Введите название привычки');return;}
+  if(D.habits.filter(x=>!x.archivedAt).length>=Habits.MAX_HABITS){alert('Не больше '+Habits.MAX_HABITS+' привычек');return;}
+  D.habits=[...D.habits,h];hbNew={emoji:'📖',days:[]};hbOpen[h.id]=false;
+  saveHabits();
+}
+function deleteHabit(id){
+  if(!confirm('Удалить привычку? Отметки сохранятся в вашей статистике уровня.'))return;
+  D.habits=D.habits.map(h=>h.id===id?{...h,archivedAt:today()}:h);
+  // архив нужен только пока у привычки есть отметки (они идут в уровень); пустые убираем
+  const used=new Set(Object.values(D.habitlog).flat());
+  D.habits=D.habits.filter(h=>!h.archivedAt||used.has(h.id));
+  saveHabits();
+}
 
 // ── Цель года и статистика по месяцам ──
 let profYear=new Date().getFullYear();
@@ -2551,7 +2654,7 @@ function stl(s){return s==='read'?'✅ Прочитано':s==='reading'?'📖 �
 function fmm(ym){if(!ym)return'';const[yr,m]=ym.split('-');return MRU[parseInt(m)-1]+' '+yr;}
 function fmd(d){if(!d)return'';try{const dt=new Date(d);return dt.getDate()+' '+MRU_G[dt.getMonth()];}catch(e){return d;}}
 function yyyymm(dt){return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');}
-function today(){return new Date().toISOString().split('T')[0];}
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function x(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ══════════════════════════════════════════════

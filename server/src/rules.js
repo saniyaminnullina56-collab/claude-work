@@ -103,6 +103,29 @@ function guardReviews(oldVal, newVal, user) {
   return null;
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Привычки и их журнал — личные данные, но формат проверяем: не даём раздуть базу мусором. */
+function guardHabits(val) {
+  if (val === null) return null;
+  if (!Array.isArray(val) || val.length > 60 || val.filter(h => h && !h.archivedAt).length > 20) return 'не больше 20 привычек';
+  for (const h of val) {
+    if (!h || typeof h !== 'object' || typeof h.id !== 'string' || h.id.length > 30) return 'неверная привычка';
+    if (typeof h.name !== 'string' || !h.name.trim() || h.name.length > 40) return 'название: от 1 до 40 символов';
+    if (h.emoji !== undefined && (typeof h.emoji !== 'string' || h.emoji.length > 8)) return 'неверный значок';
+    if (h.days != null && (!Array.isArray(h.days) || h.days.some(d => !Number.isInteger(d) || d < 0 || d > 6))) return 'неверные дни недели';
+    for (const k of ['createdAt', 'archivedAt']) if (h[k] != null && !DATE_RE.test(h[k])) return 'неверная дата';
+  }
+  return null;
+}
+function guardHabitLog(val) {
+  if (val === null) return null;
+  if (typeof val !== 'object' || Array.isArray(val) || Object.keys(val).length > 800) return 'неверный журнал';
+  for (const [day, ids] of Object.entries(val)) {
+    if (!DATE_RE.test(day) || !Array.isArray(ids) || ids.length > 20 || ids.some(i => typeof i !== 'string' || i.length > 30)) return 'неверная запись журнала';
+  }
+  return null;
+}
+
 /**
  * null — запись разрешена; иначе текст ошибки.
  * oldVal нужен для сравнения «что именно изменилось».
@@ -111,7 +134,12 @@ export function checkWrite(segs, newVal, oldVal, user) {
   const [root] = segs;
   if (!root) return 'forbidden';
   if (root === 'members' || root === 'notes') return 'forbidden';
-  if (root === 'userdata') return segs[1] === ownKey(user) ? null : 'forbidden';
+  if (root === 'userdata') {
+    if (segs[1] !== ownKey(user)) return 'forbidden';
+    if (segs[2] === 'habits' && segs.length === 3) return guardHabits(newVal ?? null);
+    if (segs[2] === 'habitlog' && segs.length === 3) return guardHabitLog(newVal ?? null);
+    return null;
+  }
   if (user.isAdmin) return null; // организатор: всё остальное
 
   switch (root) {
