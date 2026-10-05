@@ -124,6 +124,7 @@ export function checkWrite(segs, newVal, oldVal, user) {
     case 'groupstatuses': case 'ratings': case 'suggestions':
       return segs.length === 3 && segs[2] === ownKey(user) ? null : 'forbidden';
     case 'personalReviews':
+      if (!user.pro) return 'личная библиотека — по подписке';
       return segs.length === 2 ? guardReviews(oldVal, newVal, user) : 'forbidden';
     default:
       return 'forbidden';

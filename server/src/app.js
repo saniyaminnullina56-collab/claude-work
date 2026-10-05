@@ -60,7 +60,8 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
       row = store.touchUser({ ...tg, name });
     } else row = store.touchUser({ ...tg, name: row.name });
     const isAdmin = config.adminIds.includes(row.id);
-    return { id: row.id, name: row.name, username: row.username, isAdmin, key: ownKey(row) };
+    const pro = isAdmin || store.entitlements(row.id).includes('*'); // платная личная библиотека
+    return { id: row.id, name: row.name, username: row.username, isAdmin, pro, key: ownKey(row) };
   }
 
   const entitled = (user, bid) => {
@@ -78,6 +79,10 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
   function rootValue(root, user) {
     let { value, rev } = store.get([root]);
     if (root === 'config') value = sanitizeConfig(value, user);
+    if (root === 'books' && value && !user.pro) { // личная библиотека — платная: книги и отзывы не отдаём
+      value = Object.fromEntries(Object.entries(value).filter(([, b]) => !(b && b.personal)));
+    }
+    if (root === 'personalReviews' && !user.pro) value = null;
     if (root === 'userdata') value = value && value[user.key] !== undefined ? { [user.key]: value[user.key] } : null;
     return { value, rev };
   }

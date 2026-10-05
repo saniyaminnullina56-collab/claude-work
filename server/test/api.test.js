@@ -181,3 +181,25 @@ test('статика: CSP на странице, выход за пределы 
   }
   s.close();
 });
+
+test('бесплатно: всё, кроме конспектов и личной библиотеки; платное закрыто и на сервере', async () => {
+  const s = await setup();
+  await s.call(admin, 'PUT', '/api/db/books', { value: { b1: { id: 'b1', title: 'Клубная' }, p1: { id: 'p1', title: 'Личная', personal: true } } });
+  await s.call(admin, 'PUT', '/api/db/personalReviews/p1', { value: [{ by: 'Сания', text: 'отзыв' }] });
+  await s.call(admin, 'PUT', '/api/db/config', { value: { proCode: 'ALL' } });
+  // без оплаты: клубный каталог, обсуждения, голосование, оценки — доступны
+  const books = (await s.call(ann, 'GET', '/api/db/books')).data.value;
+  assert.deepEqual(Object.keys(books), ['b1']);
+  assert.equal((await s.call(ann, 'POST', '/api/db/comments/b1', { value: { id: 'c1', text: 'hi', by: 'Анна' } })).status, 200);
+  assert.equal((await s.call(ann, 'PUT', '/api/db/ratings/b1/u2', { value: 4 })).status, 200);
+  // личная библиотека: чтение и запись закрыты
+  assert.equal((await s.call(ann, 'GET', '/api/db/personalReviews/p1')).data.value, null);
+  assert.equal((await s.call(ann, 'PUT', '/api/db/personalReviews/p1', { value: [{ by: 'Анна', text: 'x' }] })).status, 403);
+  const roots = (await s.call(ann, 'POST', '/api/sync', {})).data.roots;
+  assert.equal(JSON.stringify(roots.books.value).includes('Личная'), false);
+  // после кода — открывается
+  await s.call(ann, 'POST', '/api/redeem', { code: 'all' });
+  assert.deepEqual(Object.keys((await s.call(ann, 'GET', '/api/db/books')).data.value).sort(), ['b1', 'p1']);
+  assert.equal((await s.call(ann, 'PUT', '/api/db/personalReviews/p1', { value: [{ by: 'Сания', text: 'отзыв' }, { by: 'Анна', text: 'моё' }] })).status, 200);
+  s.close();
+});

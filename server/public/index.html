@@ -719,6 +719,9 @@ function getProCode(){return(D.config&&D.config.proCode&&D.config.proCode.trim()
 async function redeemCode(code,bookId){
   const r=await api('POST','/redeem',{code,bookId});
   ME.entitlements=r.entitlements;
+  ME.pro=r.entitlements.includes('*');
+  delete fbRevs.books;delete fbRevs.personalReviews; // после оплаты подтянуть закрытые разделы
+  syncNow();
   await loadNotes();
   return r;
 }
