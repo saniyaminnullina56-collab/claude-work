@@ -1701,7 +1701,7 @@ function renderProfile(){
       </div>
     </div>`:''}
 
-    ${isAdmin()?renderBroadcastCard():''}
+    ${isAdmin()?renderNotionCard()+renderBroadcastCard():''}
   `;
 }
 function plist(title,books){
@@ -2623,6 +2623,46 @@ function saveChannel(){
   if(v&&!/^https:\/\/t\.me\/[\w+\/-]+$/.test(v)){alert('Ссылка должна начинаться с https://t.me/');return;}
   D.config.channelUrl=v;saveLocal();
   fbSet('config/channelUrl',v||null);renderHome();
+}
+// ── Конспекты из Notion (организатор) ──
+function renderNotionCard(){
+  setTimeout(loadNotionStatus,50);
+  return `<div class="card coll open"><div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>📝 Конспекты из Notion</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body" style="padding-top:10px;" id="notion-box"><div class="empty">Загрузка…</div></div></div>`;
+}
+async function loadNotionStatus(){
+  const box=document.getElementById('notion-box');if(!box)return;
+  let st;try{st=await api('GET','/admin/notion');}catch(e){box.innerHTML='<div class="empty">'+x(e.message)+'</div>';return;}
+  if(!st.configured){box.innerHTML='<div style="font-size:.82rem;color:var(--txl);">Notion пока не подключён: на сервере не заданы <b>NOTION_TOKEN</b> и <b>NOTION_ROOT_PAGE_ID</b>. Инструкция — в файле SETUP.md.</div>';return;}
+  const r=st.lastResult;
+  const opts=D.books.filter(b=>!b.personal).map(b=>`<option value="${x(b.id)}">${x(b.title)}</option>`).join('');
+  box.innerHTML=`
+    <div style="font-size:.82rem;margin-bottom:8px;">${st.running?'⏳ Синхронизация идёт…':st.lastRun?`Последняя: ${new Date(st.lastRun).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'})}`:'Ещё не запускалась'}
+      ${r?`<div style="color:var(--txl);margin-top:4px;">Привязано: ${r.matched} · обновлено: ${r.updated} · без книги: ${r.inbox}${r.duplicates.length?` · дублей пропущено: ${r.duplicates.length}`:''}</div>`:''}
+      ${st.lastError?`<div style="color:#b3261e;margin-top:4px;">⚠️ ${x(st.lastError.message)}</div>`:''}
+      ${r&&r.errors.length?`<div style="color:#b3261e;margin-top:4px;">Не загрузились: ${r.errors.map(x).join('; ')}</div>`:''}
+    </div>
+    <button class="btn bp sm" onclick="startNotionSync()">🔄 Синхронизировать сейчас</button>
+    <div style="font-size:.72rem;color:var(--txl);margin-top:6px;">Сервер также проверяет Notion сам, примерно раз в 15 минут.</div>
+    ${st.inbox.length?`<h3 style="margin:14px 0 6px;">Конспекты без книги (${st.inbox.length})</h3>
+      <div style="font-size:.75rem;color:var(--txl);margin-bottom:6px;">Этих книг нет в каталоге или название не удалось сопоставить. Привяжите к книге или создайте новую.</div>
+      ${st.inbox.map(i=>`<div style="padding:8px 0;border-top:1px solid var(--bdr);">
+        <div style="font-size:.85rem;font-weight:600;">${x(i.title)} <span style="font-weight:400;color:var(--txl);">· ${i.section.replace('Конспекты по прочитанным книгам ','')}</span></div>
+        <div class="row" style="margin-top:6px;"><select id="nb-${x(i.pageId)}" style="flex:1;"><option value="">— привязать к книге —</option>${opts}</select><button class="btn bg2 sm" onclick="bindNotion('${x(i.pageId)}',false)">Привязать</button></div>
+        <button class="btn bp sm" style="margin-top:6px;" onclick="bindNotion('${x(i.pageId)}',true)">➕ Создать новую книгу</button></div>`).join('')}`:''}
+    ${st.matches.length?`<details style="margin-top:12px;"><summary style="font-size:.8rem;cursor:pointer;">Как сопоставлены (${st.matches.length})</summary>${st.matches.map(m=>{const b=D.books.find(b=>b.id===m.bookId);return`<div style="font-size:.75rem;color:var(--txl);padding:3px 0;">${x(m.title)} → <b>${x(b?b.title:m.bookId)}</b></div>`;}).join('')}</details>`:''}`;
+}
+async function startNotionSync(){
+  try{await api('POST','/admin/notion/sync');}catch(e){alert(e.message);return;}
+  const box=document.getElementById('notion-box');if(box)box.insertAdjacentHTML('afterbegin','<div style="font-size:.8rem;">⏳ Запущено. Первый раз может занять несколько минут…</div>');
+  let n=0;const t=setInterval(async()=>{n++;try{const st=await api('GET','/admin/notion');if(!st.running||n>60){clearInterval(t);loadNotionStatus();loadNotes();syncNow();}}catch(e){clearInterval(t);}},4000);
+}
+async function bindNotion(pageId,create){
+  const sel=document.getElementById('nb-'+pageId);
+  const bookId=sel&&sel.value;
+  if(!create&&!bookId){alert('Выберите книгу');return;}
+  try{await api('POST','/admin/notion/bind',create?{pageId,create:{}}:{pageId,bookId});}catch(e){alert(e.message);return;}
+  await syncNow();await loadNotes();loadNotionStatus();
 }
 async function sendBroadcast(){
   const t=(document.getElementById('bc-text')||{}).value||'';

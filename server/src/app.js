@@ -8,6 +8,7 @@ import { verifyInitData } from './telegram.js';
 import { parsePath } from './store.js';
 import { checkRead, checkWrite, sanitizeConfig, ownKey, PUBLIC_READ } from './rules.js';
 import { createBot } from './bot.js';
+import { createNotion, syncNotion, bindPage } from './notion.js';
 import { AVATARS } from './avatars.js';
 import { previewOf } from './notes-preview.js';
 
@@ -28,10 +29,29 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-export function createApp({ store, config, fetchImpl = fetch, sleep }) {
+export function createApp({ store, config, fetchImpl = fetch, sleep, notionClient }) {
   const bot = config.botToken && config.publicUrl
     ? createBot({ token: config.botToken, publicUrl: config.publicUrl, store, fetchImpl, sleep })
     : null;
+
+  // ── Notion ──
+  const notion = notionClient || (config.notionToken && config.notionRootPageId ? createNotion({ token: config.notionToken, fetchImpl, sleep }) : null);
+  let notionRunning = false;
+  async function runNotionSync() {
+    if (!notion) throw new HttpError(503, 'Notion не настроен (нужны NOTION_TOKEN и NOTION_ROOT_PAGE_ID)');
+    if (notionRunning) return null;
+    notionRunning = true;
+    try { return await syncNotion({ store, notion, rootPageId: config.notionRootPageId }); }
+    catch (e) {
+      const st = store.get(['notionState']).value || {};
+      const message = e.status === 401 ? 'Notion не принял токен. Скопируйте «Internal Integration Secret» заново и вставьте в NOTION_TOKEN без пробелов.'
+        : e.status === 404 ? 'Notion не нашёл страницу «Читальня». Откройте её → «⋯» → «Подключения» → добавьте вашу интеграцию; проверьте и NOTION_ROOT_PAGE_ID.'
+        : e.message;
+      st.lastError = { at: new Date().toISOString(), message };
+      store.set(['notionState'], st);
+      throw e;
+    } finally { notionRunning = false; }
+  }
 
   // ── ограничение частоты ──
   const buckets = new Map();
@@ -80,7 +100,7 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
   // Содержимое корня с учётом того, что этой участнице можно видеть.
   function rootValue(root, user) {
     let { value, rev } = store.get([root]);
-    if (root === 'config') value = sanitizeConfig(value, user);
+    if (root === 'config') { value = sanitizeConfig(value, user); if (config.channelUrl && !(value && value.channelUrl)) value = { ...(value || {}), channelUrl: config.channelUrl }; }
     if (root === 'personalReviews' && !user.pro) value = null;
     if (root === 'userdata') value = value && value[user.key] !== undefined ? { [user.key]: value[user.key] } : null;
     return { value, rev };
@@ -283,6 +303,25 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
         if (p === '/api/admin/users' && method === 'GET') {
           return send(req, res, 200, store.allUsers().map(u => ({ id: u.id, name: u.name, username: u.username, notify: !!u.notify, entitlements: store.entitlements(u.id) })));
         }
+        if (p === '/api/admin/notion' && method === 'GET') {
+          const st = store.get(['notionState']).value || {};
+          const inbox = Object.values(store.get(['notionInbox']).value || {});
+          return send(req, res, 200, {
+            configured: !!notion, running: notionRunning, lastRun: st.lastRun || null, lastResult: st.lastResult || null, lastError: st.lastError || null,
+            matches: Object.values(st.pages || {}).map(p => ({ title: p.title, bookId: p.bookId })),
+            inbox: inbox.map(i => ({ pageId: i.pageId, title: i.title, section: i.section, chars: (i.content || '').length })),
+          });
+        }
+        if (p === '/api/admin/notion/sync' && method === 'POST') {
+          if (!notion) throw new HttpError(503, 'Notion не настроен (нужны NOTION_TOKEN и NOTION_ROOT_PAGE_ID)');
+          limit(`notion:${user.id}`, 6, 3600_000);
+          runNotionSync().then(r => r && console.log('notion sync', r)).catch(e => console.error('notion sync failed:', e.message));
+          return send(req, res, 202, { started: true });
+        }
+        if (p === '/api/admin/notion/bind' && method === 'POST') {
+          try { return send(req, res, 200, { bookId: bindPage({ store, pageId: String(body.pageId || ''), bookId: body.bookId, create: body.create }) }); }
+          catch (e) { throw new HttpError(e.status || 400, e.message); }
+        }
         if ((p === '/api/admin/grant' || p === '/api/admin/revoke') && method === 'POST') {
           const uid = Number(body.userId), scope = String(body.scope || '');
           if (!store.getUser(uid) || !scope) throw new HttpError(400, 'Неверные данные');
@@ -308,5 +347,5 @@ export function createApp({ store, config, fetchImpl = fetch, sleep }) {
     }
   }
 
-  return { handle, server: () => http.createServer(handle), bot };
+  return { handle, server: () => http.createServer(handle), bot, notion, runNotionSync };
 }
