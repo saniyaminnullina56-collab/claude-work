@@ -1701,7 +1701,7 @@ function renderProfile(){
       </div>
     </div>`:''}
 
-    ${isAdmin()?renderNotionCard()+renderBroadcastCard():''}
+    ${isAdmin()?renderNotionCard()+renderCoversCard()+renderBroadcastCard():''}
   `;
 }
 function plist(title,books){
@@ -2053,34 +2053,11 @@ function buildPersonalStats(readBooks){
 // ══════════════════════════════════════════════
 let coverCache={};
 function initCoverCache(){
-  try{const s=localStorage.getItem('vrk-covers');if(s)coverCache=JSON.parse(s);}catch(e){}
+  // Раньше обложки угадывались в браузере по первому результату поиска по названию — часто чужие. Теперь их подбирает и проверяет сервер.
+  try{localStorage.removeItem('vrk-covers');}catch(e){}
+  coverCache={};
 }
-function fetchMissingCovers(){
-  const missing=D.books.filter(b=>!b.personal&&!b.coverUrl&&!coverCache[b.id]);
-  if(!missing.length)return;
-  let i=0;
-  function next(){
-    if(i>=missing.length)return;
-    const b=missing[i++];
-    // Use Open Library search by title — returns cover_i (cover ID)
-    const q=encodeURIComponent(b.title);
-    fetch(`https://openlibrary.org/search.json?title=${q}&limit=1&fields=cover_i,title`)
-      .then(r=>r.json())
-      .then(data=>{
-        const doc=data&&data.docs&&data.docs[0];
-        const coverId=doc&&doc.cover_i;
-        if(coverId){
-          coverCache[b.id]=`https://covers.openlibrary.org/b/id/${coverId}-M.jpg`;
-          try{localStorage.setItem('vrk-covers',JSON.stringify(coverCache));}catch(e){}
-          renderIfActive('catalog');renderIfActive('home');
-          if(curV==='book'&&curBk===b.id)renderBook(b.id);
-        }
-        setTimeout(next,400);
-      })
-      .catch(()=>setTimeout(next,400));
-  }
-  next();
-}
+function fetchMissingCovers(){}
 function coverHtml(b){
   const url=coverCache[b.id]||b.coverUrl||'';
   if(url)return`<img src="${x(url)}" alt="" style="width:52px;height:74px;object-fit:cover;border-radius:6px;flex-shrink:0;">`;
@@ -2624,6 +2601,76 @@ function saveChannel(){
   D.config.channelUrl=v;saveLocal();
   fbSet('config/channelUrl',v||null);renderHome();
 }
+// ── Обложки (организатор) ──
+window._cc={};
+function renderCoversCard(){
+  setTimeout(loadCoversStatus,80);
+  return `<div class="card coll"><div class="coll-hdr" onclick="this.parentElement.classList.toggle('open')"><h3>🖼 Обложки книг</h3><span class="coll-ico">▾</span></div>
+    <div class="coll-body" style="padding-top:10px;" id="covers-box"><div class="empty">Загрузка…</div></div></div>`;
+}
+function candHtml(bookId,c,i){
+  const conf=c.confidence==='high'?'✓ точное':c.confidence==='medium'?'автор отличается':'проверьте';
+  return `<div style="width:84px;flex-shrink:0;cursor:pointer;" onclick="applyCoverIdx('${x(bookId)}',${i})">
+    <img src="${x(c.url)}" alt="" loading="lazy" style="width:84px;height:120px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);background:var(--bgd);"/>
+    <div style="font-size:.62rem;line-height:1.25;margin-top:3px;"><b>${x(c.title).slice(0,40)}</b><br>${x((c.authors||[]).join(', ')).slice(0,40)}<br><span style="color:var(--txl);">${x(c.lang||'')} ${x(c.year||'')} · ${conf}</span></div></div>`;
+}
+function bookCoverRow(b,cands){
+  window._cc[b.id]=cands||[];
+  return `<div style="padding:10px 0;border-top:1px solid var(--bdr);">
+    <div style="font-size:.85rem;font-weight:600;">${x(b.title)} <span style="font-weight:400;color:var(--txl);">${x(b.author||'')}</span></div>
+    ${cands&&cands.length?`<div style="display:flex;gap:8px;overflow-x:auto;margin:8px 0;padding-bottom:4px;">${cands.map((c,i)=>candHtml(b.id,c,i)).join('')}</div><div style="font-size:.7rem;color:var(--txl);">Нажмите на подходящую обложку. Если среди них нет нужной — загрузите свою.</div>`:'<div style="font-size:.75rem;color:var(--txl);margin:6px 0;">Подходящих вариантов не нашлось.</div>'}
+    <label class="btn bg2 sm" style="display:inline-block;margin-top:6px;">📤 Загрузить свою<input type="file" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="uploadCover('${x(b.id)}',this)"/></label></div>`;
+}
+async function loadCoversStatus(){
+  const box=document.getElementById('covers-box');if(!box)return;
+  let st;try{st=await api('GET','/admin/covers');}catch(e){box.innerHTML='<div class="empty">'+x(e.message)+'</div>';return;}
+  const revIds=Object.keys(st.review||{});
+  const byId=Object.fromEntries(D.books.map(b=>[b.id,b]));
+  const noCand=st.missing.filter(m=>!revIds.includes(m.id));
+  const r=st.lastResult;
+  box.innerHTML=`
+    <div style="font-size:.82rem;margin-bottom:8px;">${st.running?'⏳ Подбор идёт…':st.lastRun?'Последний подбор: '+new Date(st.lastRun).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}):'Подбор ещё не запускался'}
+      <div style="color:var(--txl);margin-top:3px;">Без обложки: ${st.missing.length} · на проверку: ${revIds.length}${r?` · поставлено само: ${r.applied}`:''}</div>
+      ${r&&r.errors&&r.errors.length?`<div style="color:#b3261e;margin-top:3px;font-size:.75rem;">⚠️ ${x(r.errors.slice(0,2).join('; '))}</div>`:''}</div>
+    <button class="btn bp sm" onclick="startCoverJob()">🔍 Подобрать автоматически</button>
+    <div style="font-size:.72rem;color:var(--txl);margin-top:6px;">Сама ставится только обложка, у которой совпали название, автор и язык. Остальное — на ваш выбор ниже.</div>
+    ${revIds.length?`<h3 style="margin:14px 0 4px;">Нужна проверка (${revIds.length})</h3>${revIds.map(id=>byId[id]?bookCoverRow(byId[id],st.review[id]):'').join('')}`:''}
+    ${noCand.length?`<h3 style="margin:14px 0 4px;">Совсем без вариантов (${noCand.length})</h3>${noCand.map(m=>bookCoverRow(m,[])).join('')}`:''}
+    <details style="margin-top:14px;"><summary style="font-size:.82rem;cursor:pointer;">Сменить обложку у любой книги</summary>
+      <div class="row" style="margin-top:8px;"><select id="cv-pick" style="flex:1;">${D.books.map(b=>`<option value="${x(b.id)}">${x(b.title)}</option>`).join('')}</select><button class="btn bg2 sm" onclick="searchCoverFor()">Найти</button></div>
+      <div id="cv-one"></div></details>`;
+}
+async function startCoverJob(){
+  try{await api('POST','/admin/covers/auto',{});}catch(e){alert(e.message);return;}
+  const box=document.getElementById('covers-box');if(box)box.insertAdjacentHTML('afterbegin','<div style="font-size:.8rem;">⏳ Запущено: примерно секунда на книгу…</div>');
+  let n=0;const t=setInterval(async()=>{n++;try{const st=await api('GET','/admin/covers');if(!st.running||n>90){clearInterval(t);await syncNow();loadCoversStatus();}}catch(e){clearInterval(t);}},3000);
+}
+async function searchCoverFor(){
+  const id=document.getElementById('cv-pick').value,el=document.getElementById('cv-one');
+  el.innerHTML='<div class="empty">Ищу…</div>';
+  try{const r=await api('POST','/admin/covers/search',{bookId:id});const b=D.books.find(b=>b.id===id);
+    el.innerHTML=bookCoverRow(b,r.candidates)+(r.errors.length?`<div style="color:#b3261e;font-size:.72rem;">${x(r.errors.join('; '))}</div>`:'')+`<button class="btn bg2 sm" style="margin-top:6px;" onclick="clearCover('${x(id)}')">Убрать обложку</button>`;
+  }catch(e){el.innerHTML='<div class="empty">'+x(e.message)+'</div>';}
+}
+async function applyCoverIdx(bookId,i){
+  const c=(window._cc[bookId]||[])[i];if(!c)return;
+  try{await api('POST','/admin/covers/apply',{bookId,url:c.url,source:c.source});}catch(e){alert(e.message);return;}
+  await syncNow();loadCoversStatus();renderIfActive('catalog');
+}
+async function uploadCover(bookId,input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(f.size>1500000){alert('Файл больше 1,5 МБ — уменьшите картинку');return;}
+  try{
+    const r=await fetch('/api/admin/covers/'+encodeURIComponent(bookId),{method:'PUT',headers:{'Authorization':authHeader(),'Content-Type':f.type},body:f});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||('Ошибка '+r.status));}
+  }catch(e){alert(e.message);return;}
+  await syncNow();loadCoversStatus();renderIfActive('catalog');
+}
+async function clearCover(bookId){
+  try{await api('DELETE','/admin/covers/'+encodeURIComponent(bookId));}catch(e){alert(e.message);return;}
+  await syncNow();loadCoversStatus();renderIfActive('catalog');
+}
+
 // ── Конспекты из Notion (организатор) ──
 function renderNotionCard(){
   setTimeout(loadNotionStatus,50);

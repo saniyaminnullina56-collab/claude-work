@@ -10,18 +10,15 @@ export function scoreCandidate(book, c) {
   if (!bt.length) return { score: 0, confidence: 'low' };
   const title = new Set(toks(c.title));
   const full = new Set([...title, ...toks(c.subtitle)]);
-  const coverage = bt.filter(t => full.has(t)).length / bt.length;
-  const matched = bt.filter(t => title.has(t)).length;
-  const precision = title.size ? Math.max(matched, bt.filter(t => full.has(t)).length * 0.999) / Math.max(title.size, bt.length) : 0;
+  const bset = new Set(bt);
+  const coverage = bt.filter(t => full.has(t)).length / bt.length;           // все ли слова нашей книги есть у кандидата
+  const precision = title.size ? [...title].filter(t => bset.has(t)).length / title.size : 0; // нет ли у кандидата лишнего («Рабочая тетрадь»)
   const ba = toks(book.author), ca = new Set(toks((c.authors || []).join(' ')));
   const authorOk = ba.length > 0 && ba.some(t => ca.has(t));
-  const cyr = hasCyrillic(book.title);
-  const langOk = !cyr || c.lang === 'ru';
-  const score = Math.round(coverage * 50 + Math.min(1, precision) * 20 + (authorOk ? 25 : 0) + (langOk ? 5 : 0));
+  const langOk = !hasCyrillic(book.title) || c.lang === 'ru';
+  const score = Math.round(coverage * 50 + precision * 20 + (authorOk ? 25 : 0) + (langOk ? 5 : 0));
   let confidence = 'low';
-  if (coverage >= 0.99 && precision >= 0.6 && langOk) confidence = authorOk || !ba.length ? 'high' : 'medium';
-  if (confidence === 'high' && !ba.length) confidence = 'medium'; // без автора в каталоге уверенности нет
-  else if (coverage < 0.6) confidence = 'low';
+  if (coverage >= 0.99 && precision >= 0.6 && langOk) confidence = authorOk ? 'high' : 'medium'; // без совпадения автора — только вручную
   return { score, confidence };
 }
 

@@ -8,6 +8,8 @@ export function loadConfig(overrides = {}) {
     webhookSecret: env.WEBHOOK_SECRET || '',
     publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
     adminIds: (env.ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean).map(Number),
+    priceAll: env.PRICE_ALL || '2500 ₸',
+    googleBooksKey: env.GOOGLE_BOOKS_KEY || '',
     notionToken: env.NOTION_TOKEN || '',
     notionRootPageId: (env.NOTION_ROOT_PAGE_ID || '').replace(/-/g, ''),
     notionIntervalMin: Number(env.NOTION_INTERVAL_MIN || 15),

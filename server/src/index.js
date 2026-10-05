@@ -15,6 +15,11 @@ if (config.botToken && config.publicUrl && config.webhookSecret) {
 const store = openStore(config.dbFile);
 const app = createApp({ store, config });
 const server = app.server();
+{ // обложки: подбор для книг без обложки при старте и раз в 6 часов
+  const covers = () => app.runCoverJob().then(r => r && console.log('covers', JSON.stringify(r)), e => console.error('covers failed:', e.message));
+  setTimeout(covers, 30_000);
+  setInterval(covers, 6 * 3600_000).unref();
+}
 if (app.notion) { // конспекты из Notion: при старте и затем по расписанию
   const tick = () => app.runNotionSync().then(r => r && console.log('notion sync', JSON.stringify(r))).catch(e => console.error('notion sync failed:', e.message));
   setTimeout(tick, 10_000);

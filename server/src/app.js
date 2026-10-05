@@ -9,6 +9,7 @@ import { parsePath } from './store.js';
 import { checkRead, checkWrite, sanitizeConfig, ownKey, PUBLIC_READ } from './rules.js';
 import { createBot } from './bot.js';
 import { createNotion, syncNotion, bindPage } from './notion.js';
+import { findCovers, isAllowedCoverUrl } from './covers.js';
 import { AVATARS } from './avatars.js';
 import { previewOf } from './notes-preview.js';
 
@@ -52,6 +53,56 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
       throw e;
     } finally { notionRunning = false; }
   }
+
+  // ── обложки ──
+  const coversDir = config.coversDir || path.join(path.dirname(config.dbFile || './data/x'), 'covers');
+  const DAY = 86400_000;
+  let coversRunning = false;
+  const getBook = id => { const b = store.get(['books', id]).value; return b && typeof b === 'object' ? b : null; };
+  function setCover(bookId, url, source) {
+    const b = getBook(bookId);
+    if (!b) throw new HttpError(404, 'Такой книги нет');
+    store.set(['books', bookId], { ...b, coverUrl: url, coverSource: source });
+    const st = store.get(['coverState']).value || {};
+    if (st.review) delete st.review[bookId];
+    store.set(['coverState'], st);
+  }
+  async function runCoverJob({ force = false } = {}) {
+    if (coversRunning) return null;
+    coversRunning = true;
+    const res = { applied: 0, review: 0, none: 0, errors: [] };
+    try {
+      const booksVal = store.get(['books']).value || {};
+      const books = (Array.isArray(booksVal) ? booksVal : Object.values(booksVal)).filter(b => b && b.id && !b.coverUrl);
+      const st = store.get(['coverState']).value || {};
+      st.checked ||= {}; st.review ||= {};
+      for (const b of books) {
+        if (!force && st.checked[b.id] && Date.now() - st.checked[b.id] < 7 * DAY) continue;
+        const { candidates, errors } = await findCovers(b, { fetchImpl, googleKey: config.googleBooksKey });
+        res.errors.push(...errors.map(e => `${b.title}: ${e}`));
+        if (errors.length >= 2 && !candidates.length) continue; // источники недоступны — не помечаем как проверенную
+        st.checked[b.id] = Date.now();
+        const best = candidates[0];
+        if (best && best.confidence === 'high') { setCover(b.id, best.url, best.source); delete st.review[b.id]; res.applied++; }
+        else if (candidates.length) { st.review[b.id] = candidates; res.review++; }
+        else res.none++;
+        store.set(['coverState'], { ...(store.get(['coverState']).value || {}), checked: st.checked, review: { ...(store.get(['coverState']).value || {}).review, ...(best && best.confidence === 'high' ? {} : candidates.length ? { [b.id]: candidates } : {}) } });
+        await (sleep ? sleep(1100) : new Promise(r => setTimeout(r, 1100)));
+      }
+      const fin = store.get(['coverState']).value || {};
+      fin.lastRun = new Date().toISOString(); fin.lastResult = res;
+      store.set(['coverState'], fin);
+      return res;
+    } finally { coversRunning = false; }
+  }
+  async function readRaw(req, maxBytes) {
+    const chunks = []; let size = 0;
+    for await (const c of req) { size += c.length; if (size > maxBytes) throw new HttpError(413, 'Файл слишком большой (до 1,5 МБ)'); chunks.push(c); }
+    return Buffer.concat(chunks);
+  }
+  const imageType = b => (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff ? 'jpg'
+    : b.length > 8 && b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? 'png'
+    : b.length > 12 && b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP' ? 'webp' : null);
 
   // ── ограничение частоты ──
   const buckets = new Map();
@@ -100,7 +151,8 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
   // Содержимое корня с учётом того, что этой участнице можно видеть.
   function rootValue(root, user) {
     let { value, rev } = store.get([root]);
-    if (root === 'config') { value = sanitizeConfig(value, user); if (config.channelUrl && !(value && value.channelUrl)) value = { ...(value || {}), channelUrl: config.channelUrl }; }
+    if (root === 'config') { value = sanitizeConfig(value, user); if (config.channelUrl && !(value && value.channelUrl)) value = { ...(value || {}), channelUrl: config.channelUrl };
+      if (config.priceAll && !(value && value.payInfo && value.payInfo.price)) value = { ...value, payInfo: { ...((value && value.payInfo) || {}), price: config.priceAll } }; }
     if (root === 'personalReviews' && !user.pro) value = null;
     if (root === 'userdata') value = value && value[user.key] !== undefined ? { [user.key]: value[user.key] } : null;
     return { value, rev };
@@ -230,6 +282,14 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
     const p = url.pathname;
     try {
       if (p === '/healthz') return send(req, res, 200, { ok: true });
+      if (p.startsWith('/covers/')) {
+        const name = decodeURIComponent(p.slice('/covers/'.length));
+        const file = path.join(coversDir, name);
+        if (!/^[\w-]+\.(jpg|png|webp)$/.test(name) || !fs.existsSync(file)) return send(req, res, 404, { error: 'Не найдено' });
+        const ext = path.extname(name).slice(1);
+        res.writeHead(200, { 'content-type': ext === 'jpg' ? 'image/jpeg' : `image/${ext}`, 'cache-control': 'public, max-age=86400', 'x-content-type-options': 'nosniff' });
+        return res.end(fs.readFileSync(file));
+      }
       if (!p.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Метод не поддерживается');
         return serveStatic(req, res, p);
@@ -297,6 +357,23 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
         return send(req, res, 200, { ok: true });
       }
 
+      if (p.startsWith('/api/admin/covers/') && ['PUT', 'DELETE'].includes(method)) {
+        if (!user.isAdmin) throw new HttpError(403, 'Только организатор');
+        const segs = parsePath(p.slice('/api/admin/covers/'.length));
+        if (!segs || segs.length !== 1 || !/^[\w-]+$/.test(segs[0])) throw new HttpError(400, 'Неверный путь');
+        const bookId = segs[0];
+        if (!getBook(bookId)) throw new HttpError(404, 'Такой книги нет');
+        fs.mkdirSync(coversDir, { recursive: true });
+        for (const e of ['jpg', 'png', 'webp']) fs.rmSync(path.join(coversDir, `${bookId}.${e}`), { force: true });
+        if (method === 'DELETE') { const b = getBook(bookId); store.set(['books', bookId], { ...b, coverUrl: '', coverSource: '' }); return send(req, res, 200, { ok: true }); }
+        const buf = await readRaw(req, 1_500_000);
+        const type = imageType(buf);
+        if (!type) throw new HttpError(400, 'Нужен файл JPEG, PNG или WebP');
+        fs.writeFileSync(path.join(coversDir, `${bookId}.${type}`), buf);
+        setCover(bookId, `/covers/${bookId}.${type}?v=${Date.now().toString(36)}`, 'upload');
+        return send(req, res, 200, { ok: true });
+      }
+
       if (p.startsWith('/api/admin/')) {
         if (!user.isAdmin) throw new HttpError(403, 'Только организатор');
         const body = method === 'GET' ? {} : await readBody(req, 10_000);
@@ -321,6 +398,31 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
         if (p === '/api/admin/notion/bind' && method === 'POST') {
           try { return send(req, res, 200, { bookId: bindPage({ store, pageId: String(body.pageId || ''), bookId: body.bookId, create: body.create }) }); }
           catch (e) { throw new HttpError(e.status || 400, e.message); }
+        }
+        if (p === '/api/admin/covers' && method === 'GET') {
+          const st = store.get(['coverState']).value || {};
+          const booksVal = store.get(['books']).value || {};
+          const all = (Array.isArray(booksVal) ? booksVal : Object.values(booksVal)).filter(b => b && b.id);
+          return send(req, res, 200, {
+            running: coversRunning, lastRun: st.lastRun || null, lastResult: st.lastResult || null, review: st.review || {},
+            missing: all.filter(b => !b.coverUrl).map(b => ({ id: b.id, title: b.title, author: b.author || '', personal: !!b.personal })),
+          });
+        }
+        if (p === '/api/admin/covers/auto' && method === 'POST') {
+          limit(`covers:${user.id}`, 10, 3600_000);
+          runCoverJob({ force: !!body.force }).catch(e => console.error('covers job failed:', e.message));
+          return send(req, res, 202, { started: true });
+        }
+        if (p === '/api/admin/covers/search' && method === 'POST') {
+          const b = getBook(String(body.bookId || ''));
+          if (!b) throw new HttpError(404, 'Такой книги нет');
+          limit(`coversearch:${user.id}`, 60, 3600_000);
+          return send(req, res, 200, await findCovers(b, { fetchImpl, googleKey: config.googleBooksKey }));
+        }
+        if (p === '/api/admin/covers/apply' && method === 'POST') {
+          if (!isAllowedCoverUrl(body.url)) throw new HttpError(400, 'Недопустимый адрес обложки');
+          setCover(String(body.bookId || ''), body.url, body.source || 'manual');
+          return send(req, res, 200, { ok: true });
         }
         if ((p === '/api/admin/grant' || p === '/api/admin/revoke') && method === 'POST') {
           const uid = Number(body.userId), scope = String(body.scope || '');
@@ -347,5 +449,5 @@ export function createApp({ store, config, fetchImpl = fetch, sleep, notionClien
     }
   }
 
-  return { handle, server: () => http.createServer(handle), bot, notion, runNotionSync };
+  return { handle, server: () => http.createServer(handle), bot, notion, runNotionSync, runCoverJob };
 }
